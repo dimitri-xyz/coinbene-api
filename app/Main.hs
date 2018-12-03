@@ -1,6 +1,6 @@
 module Main where
 
-import Lib
+import Coinbene
 
 main :: IO ()
-main = someFunc
+main = putStrLn "Hi!"
