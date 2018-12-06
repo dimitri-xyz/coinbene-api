@@ -37,7 +37,13 @@ packages:
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
-# extra-deps: []
+extra-deps:
+- git: https://github.com/dimitri-xyz/market-model
+  commit: 75b9cd7fae0e374adae76b4277e1ba7bfe26e388
+
+- git: https://github.com/dimitri-xyz/razao-base
+  commit: 5fc12c80aab9757f3aa1202d1abd4a7e172922df
+- reactive-banana-1.2.0.0
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
