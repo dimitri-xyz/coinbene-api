@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Coinbene where
@@ -17,20 +16,59 @@ import Data.Char                    (toLower)
 import GHC.Generics
 import Data.Aeson
 import Data.Aeson.Types             (Object, Parser)
-import Market.Types                                   hiding (QuoteBook)
+import Data.Scientific
 
+-------------------
+newtype BTC  = BTC  Scientific deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
+newtype BRL  = BRL  Scientific deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
+newtype LTC  = LTC  Scientific deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
+newtype ETH  = ETH  Scientific deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
+newtype USDT = USDT Scientific deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
+-- instance Show USDT where
+--     show (USDT x) = formatScientific Fixed (Just 2) x
 
-newtype URL = URL {urlToString :: String} deriving (Show,Eq)
------------------------------------------
--- Just Gets an httpS URL
--- returns ( Response Code, Response Body)
---
-getSecureURL :: URL -> IO (Int , ByteString)
-getSecureURL url = do
-    req      <- parseUrlThrow (urlToString url)
-    manager  <- newManager tlsManagerSettings
-    response <- httpLbs (req {secure = True}) manager
-    return ( statusCode $ responseStatus response, responseBody response)
+instance FromJSON BTC
+instance ToJSON   BTC
+
+instance FromJSON BRL
+instance ToJSON   BRL
+
+instance FromJSON LTC
+instance ToJSON   LTC
+
+instance FromJSON ETH
+instance ToJSON   ETH
+
+instance FromJSON USDT
+instance ToJSON   USDT
+
+-------------------
+class CoinSymbol coin where
+  coinSymbol :: coin -> String
+
+instance CoinSymbol BTC where
+  coinSymbol _ = "BTC"
+instance CoinSymbol BRL where
+  coinSymbol _ = "BRL"
+instance CoinSymbol LTC where
+  coinSymbol _ = "LTC"
+instance CoinSymbol ETH where
+  coinSymbol _ = "ETH"
+instance CoinSymbol USDT where
+  coinSymbol _ = "USDT"
+-------------------
+
+newtype Vol   a = Vol   a deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
+newtype Price a = Price a deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
+newtype Cost  a = Cost  a deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
+
+instance (Generic a, FromJSON a) => FromJSON (Price a)
+instance (Generic a, FromJSON a) => FromJSON (Vol   a)
+instance (Generic a, FromJSON a) => FromJSON (Cost  a)
+
+instance (Generic a, ToJSON   a) => ToJSON   (Price a)
+instance (Generic a, ToJSON   a) => ToJSON   (Vol   a)
+instance (Generic a, ToJSON   a) => ToJSON   (Cost  a)
 -----------------------------------------
 
 newtype MilliEpoch = MilliEpoch Word64 deriving (Show, Eq, Ord, Generic, Num, Real, Enum, Integral)
@@ -53,43 +91,22 @@ data QuoteBook p v
   = QuoteBook
     { qbAsks::[AskQuote p v]
     , qbBids::[BidQuote p v]
-    -- , qbTimestamp :: MilliEpoch
     } deriving (Show, Eq, Generic)
 
------------------------------------------
-deriving instance Generic BRL
-instance FromJSON BRL
-instance ToJSON   BRL
-
-deriving instance Generic BTC
-instance FromJSON BTC
-instance ToJSON   BTC
-
-deriving instance Generic a => Generic (Price a)
-deriving instance Generic a => Generic (Vol   a)
-instance (Generic a, FromJSON a) => FromJSON (Price a)
-instance (Generic a, FromJSON a) => FromJSON (Vol   a)
-instance (Generic a, ToJSON   a) => ToJSON   (Price a)
-instance (Generic a, ToJSON   a) => ToJSON   (Vol   a)
-
-
--- removes field label name mangling
+-- `writeQuoteOpts` removes field label name mangling
 writeQuoteOpts = defaultOptions {fieldLabelModifier = map toLower . drop 2}
-------------
--- instance (ToJSON (Price p), ToJSON (Vol v)) => ToJSON (AskQuote p v) where
+
 instance (ToJSON p, Generic p, ToJSON v, Generic v) => ToJSON (AskQuote p v) where
     toJSON = genericToJSON writeQuoteOpts
 instance (ToJSON p, Generic p, ToJSON v, Generic v) => ToJSON (BidQuote p v) where
+    toJSON = genericToJSON writeQuoteOpts
+instance (ToJSON p, Generic p, ToJSON v, Generic v) => ToJSON (QuoteBook p v) where
     toJSON = genericToJSON writeQuoteOpts
 
 instance (FromJSON p, Generic p, FromJSON v, Generic v) => FromJSON (AskQuote p v) where
     parseJSON = withObject "AskQuote" $ \v -> AskQ <$> v .: "price" <*> v .: "quantity"
 instance (FromJSON p, Generic p, FromJSON v, Generic v) => FromJSON (BidQuote p v) where
     parseJSON = withObject "BidQuote" $ \v -> BidQ <$> v .: "price" <*> v .: "quantity"
-------------
-
-instance (ToJSON p, Generic p, ToJSON v, Generic v) => ToJSON (QuoteBook p v) where
-    toJSON = genericToJSON writeQuoteOpts
 instance (FromJSON p, Generic p, FromJSON v, Generic v) => FromJSON (QuoteBook p v) where
     parseJSON = withObject "QuoteBook" $ \v -> QuoteBook <$> v .: "asks" <*> v .: "bids"
 -----------------------------------------
@@ -147,3 +164,17 @@ parseQuoteBookPayload h = do
     case (mBook, mSymbol) of
         (Just b, Just s) -> return (BookPayload b s)
         _ -> fail "Unable to parse orderbook and symbol in successful response" 
+
+
+-----------------------------------------
+newtype URL = URL {urlToString :: String} deriving (Show,Eq)
+-----------------------------------------
+-- Just Gets an httpS URL
+-- returns (Response Code, Response Body)
+--
+getSecureURL :: URL -> IO (Int , ByteString)
+getSecureURL url = do
+    req      <- parseUrlThrow (urlToString url)
+    manager  <- newManager tlsManagerSettings
+    response <- httpLbs (req {secure = True}) manager
+    return ( statusCode $ responseStatus response, responseBody response)
