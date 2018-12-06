@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Coinbene where
 
@@ -16,48 +17,10 @@ import Data.Char                    (toLower)
 import GHC.Generics
 import Data.Aeson
 import Data.Aeson.Types             (Object, Parser)
-import Data.Scientific
 
--------------------
-newtype BTC  = BTC  Scientific deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
-newtype BRL  = BRL  Scientific deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
-newtype LTC  = LTC  Scientific deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
-newtype ETH  = ETH  Scientific deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
-newtype USDT = USDT Scientific deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
--- instance Show USDT where
---     show (USDT x) = formatScientific Fixed (Just 2) x
+import Coins
 
-instance FromJSON BTC
-instance ToJSON   BTC
-
-instance FromJSON BRL
-instance ToJSON   BRL
-
-instance FromJSON LTC
-instance ToJSON   LTC
-
-instance FromJSON ETH
-instance ToJSON   ETH
-
-instance FromJSON USDT
-instance ToJSON   USDT
-
--------------------
-class CoinSymbol coin where
-  coinSymbol :: coin -> String
-
-instance CoinSymbol BTC where
-  coinSymbol _ = "BTC"
-instance CoinSymbol BRL where
-  coinSymbol _ = "BRL"
-instance CoinSymbol LTC where
-  coinSymbol _ = "LTC"
-instance CoinSymbol ETH where
-  coinSymbol _ = "ETH"
-instance CoinSymbol USDT where
-  coinSymbol _ = "USDT"
--------------------
-
+-----------------------------------------
 newtype Vol   a = Vol   a deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
 newtype Price a = Price a deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
 newtype Cost  a = Cost  a deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
@@ -130,19 +93,29 @@ data QuoteBookPayload p v
 
 data NoPayload a b = NoPayload deriving (Show, Eq, Generic)
 
+-----------------------------------------
 class ParsePayload a where
     parsePayload :: Object -> Parser a
+
 
 instance ParsePayload (NoPayload a b) where
     parsePayload _ = pure NoPayload 
 
-instance (FromJSON p, Generic p, FromJSON v, Generic v) => ParsePayload (QuoteBookPayload p v) where
+instance ( FromJSON   p
+         , Generic    p
+         , CoinSymbol p
+         , FromJSON   v
+         , Generic    v
+         , CoinSymbol v
+         ) => ParsePayload (QuoteBookPayload p v) where
     parsePayload = parseQuoteBookPayload
 
-instance (FromJSON p
-         , Generic p
-         , FromJSON v
-         , Generic v
+instance (FromJSON    p
+         , Generic    p
+         , CoinSymbol p
+         , FromJSON   v
+         , Generic    v
+         , CoinSymbol v
          , ParsePayload (QuoteBookPayload p v)) 
          => FromJSON (Resp QuoteBookPayload p v) where
     parseJSON (Object h) = do
@@ -157,12 +130,21 @@ instance (FromJSON p
             _ -> fail ("Unknown response status code: " ++ status)
 
 
-parseQuoteBookPayload :: (FromJSON p, Generic p, FromJSON v, Generic v) => Object -> Parser (QuoteBookPayload p v)
+parseQuoteBookPayload :: forall p v.
+        ( FromJSON   p
+        , Generic    p
+        , CoinSymbol p
+        , FromJSON   v
+        , Generic    v
+        , CoinSymbol v
+        ) => Object -> Parser (QuoteBookPayload p v)
 parseQuoteBookPayload h = do
     mBook   <- h .:? "orderbook"
     mSymbol <- h .:? "symbol"
     case (mBook, mSymbol) of
-        (Just b, Just s) -> return (BookPayload b s)
+        (Just b, Just s) -> if s == (coinSymbol (undefined :: v) ++ coinSymbol (undefined :: p) )
+                                then return (BookPayload b s)
+                                else fail $ "Obtained data for:" ++ s ++ " market"
         _ -> fail "Unable to parse orderbook and symbol in successful response" 
 
 
