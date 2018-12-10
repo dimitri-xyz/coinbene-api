@@ -10,7 +10,7 @@ import GHC.Generics
 import Data.Aeson
 
 -----------------------------------------
-class CoinSymbol coin where
+class (Generic coin, FromJSON coin) => CoinSymbol coin where
   coinSymbol :: coin -> String
 
 -----------------------------------------

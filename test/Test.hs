@@ -9,6 +9,9 @@ import Coinbene.Parse
 import Coinbene.Request
 import Coins
 
+import Network.HTTP.Client          (newManager)
+import Network.HTTP.Client.TLS      (tlsManagerSettings)
+
 main = defaultMain tests
 
 tests :: TestTree
@@ -17,15 +20,15 @@ tests = testGroup "\nAPI test cases"
         let mSampleResp = decode encodedSampleResponse
         mSampleResp @?= Just sampleResponse
 
-  , testCase "benchmark failed response parsing" $ do
+  , testCase "benchmark \"failed response\" parsing" $ do
         let mSampleError = decode encodedsampleRespError
         mSampleError @?= Just sampleRespError
 
   , testCase "live BTCBRL orderbook parsing" $ do
-        (code, resp) <- getSecureURL (URL "https://api.coinbene.com/v1/market/orderbook?symbol=btcbrl&depth=200")
-        let mResp :: Maybe (Resp QuoteBookPayload BRL BTC)
-            mResp =  decode resp
-        assertBool (show (code, resp)) (case mResp of {Nothing -> False; _ -> True})
+        manager  <- newManager tlsManagerSettings
+        let coinbene = Coinbene manager undefined undefined
+        book <- getBook coinbene (undefined :: Price BRL) (undefined :: Vol BTC)
+        assertBool (show book) $ False
   ]
 
 ---------------------------------------

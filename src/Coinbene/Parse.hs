@@ -6,8 +6,6 @@
 
 module Coinbene.Parse where
 
--- import Data.ByteString.Lazy.Char8   (ByteString, unpack)
-
 import GHC.Generics
 import Data.Aeson
 import Data.Aeson.Types             (Object, Parser)
