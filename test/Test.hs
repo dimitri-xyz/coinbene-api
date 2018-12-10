@@ -5,6 +5,8 @@ import Test.Tasty.HUnit
 
 import Data.Aeson
 import Coinbene
+import Coinbene.Parse
+import Coinbene.Request
 import Coins
 
 main = defaultMain tests
