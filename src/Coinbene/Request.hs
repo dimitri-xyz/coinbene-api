@@ -4,42 +4,49 @@
 
 module Coinbene.Request where
 
-import GHC.Generics
+import           GHC.Generics
 
-import Network.HTTP.Simple                                  hiding (httpLbs)
-import Network.HTTP.Client
-import Network.HTTP.Client.TLS      (tlsManagerSettings)
-import Network.HTTP.Types.Status    (statusCode)
-import Data.ByteString.Lazy.Char8   (ByteString, unpack)
+import           Network.HTTP.Simple                        hiding (httpLbs)
+import           Network.HTTP.Client
+import           Network.HTTP.Client.TLS            (tlsManagerSettings)
+import           Network.HTTP.Types.Status          (statusCode)
 
-import Data.ByteString.Char8        (pack)
-import Data.Aeson
+import qualified Data.ByteString.Lazy.Char8 as LBS  (ByteString, pack, unpack)
+import           Data.ByteString.Char8              (ByteString, pack, unpack)
+import           Data.Aeson
 
-import Control.Monad.Time           (MonadTime, currentTime)
-import Data.Time.Clock.POSIX        (utcTimeToPOSIXSeconds)
+import           Data.Maybe                         (fromMaybe)
+import           Data.Char                          (toUpper, isDigit)
+import           Data.List                          (intercalate, sort, dropWhile)
 
-import Coinbene
-import Coinbene.Parse
+import           Control.Monad.Time                 (MonadTime, currentTime)
+import           Data.Time.Clock.POSIX              (utcTimeToPOSIXSeconds)
+
+import           Coinbene
+import           Coinbene.Parse
+
+import Debug.Trace
 
 -----------------------------------------
 class Monad m => HTTP m where
-    http :: Request -> Manager -> m (Response ByteString)
+    http :: Request -> Manager -> m (Response LBS.ByteString)
 
 instance HTTP IO where
     http = httpLbs
 
-newtype OrderID = OID String
-data OrderSide = Bid | Ask
+data OrderSide  = Bid | Ask deriving Show
 
+newtype OrderID = OrderID String
 type Confirmation = OrderID
 
 class Exchange config m where
-    placeLimit :: ( HTTP m, MonadTime m, CoinSymbol p, CoinSymbol v) => config -> OrderSide -> Price p -> Vol v -> m Confirmation
-    getBook    :: ( HTTP m, MonadTime m, CoinSymbol p, CoinSymbol v) => config              -> Price p -> Vol v -> m (QuoteBook p v)
+    placeLimit :: ( HTTP m, MonadTime m, Coin p, Coin v) => config -> OrderSide -> Price p -> Vol v -> m Confirmation
+    getBook    :: ( HTTP m, MonadTime m, Coin p, Coin v) => config              -> Price p -> Vol v -> m (QuoteBook p v)
 
 
-data API_ID = API_ID
-data API_KEY 
+newtype API_ID  = API_ID  {getID  :: String} 
+newtype API_KEY = API_KEY {getKey :: String}
+
 data Coinbene = Coinbene
     { getManager :: Manager
     , getAPI_ID  :: API_ID
@@ -47,13 +54,19 @@ data Coinbene = Coinbene
     }
 
 instance Exchange Coinbene IO where
-    placeLimit = placeCoinbeneLimit
-    getBook    = getCoinbeneBook
+    placeLimit     = placeCoinbeneLimit
+    getBook config = getCoinbeneBook config 200
 
 
 -----------------------------------------
-marketSymbol :: forall p v. (CoinSymbol p, CoinSymbol v) => Price p -> Vol v -> String
+marketSymbol :: forall p v. (Coin p, Coin v) => Price p -> Vol v -> String
 marketSymbol p v = coinSymbol (undefined :: v) ++ coinSymbol (undefined :: p)
+
+toStr :: (ByteString, Maybe ByteString) -> (String, String)
+toStr (x, mY) = (unpack x, unpack $ fromMaybe "" mY)
+
+fromStr :: (String, String) -> (ByteString, Maybe ByteString)
+fromStr (x,  y) = (pack x  , Just $ pack y)
 
 coinbeneRequest
     = setRequestHost "api.coinbene.com"
@@ -61,10 +74,11 @@ coinbeneRequest
     $ setRequestPort 443
     $ defaultRequest
 
+
 getCoinbeneBook :: forall m p v.
-    ( HTTP m, CoinSymbol p, CoinSymbol v)
-    => Coinbene -> Price p -> Vol v -> m (QuoteBook p v)
-getCoinbeneBook config p v = do
+    ( HTTP m, Coin p, Coin v)
+    => Coinbene -> Int -> Price p -> Vol v -> m (QuoteBook p v)
+getCoinbeneBook config depth p v = do
     response <- http request (getManager config)
     case eitherDecode (responseBody response) of
         Left errMsg -> error ("getCoinbeneBook: " ++ errMsg ++ " response: " ++ show response) -- FIX ME! should not use `error` here
@@ -77,12 +91,13 @@ getCoinbeneBook config p v = do
         $ setRequestQueryString query
         $ coinbeneRequest
 
-    query = map toQueryItem $
+    query = map fromStr $
         [ ("symbol", marketName)
-        , ("depth", "200")]
+        , ("depth", show depth)]
+
 
 placeCoinbeneLimit :: forall m p v.
-    ( HTTP m, MonadTime m, CoinSymbol p, CoinSymbol v)
+    ( HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> OrderSide -> Price p -> Vol v -> m (Confirmation)
 placeCoinbeneLimit config side p v = do
     signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) request
@@ -96,12 +111,13 @@ placeCoinbeneLimit config side p v = do
         $ setRequestQueryString query
         $ coinbeneRequest
 
-    query = map toQueryItem $
-        [ ("symbol", marketName)
-        , ("price", "22")
-        , ("quantity", "33")
-        , ("type", "buy-limit")
+    query = map fromStr $
+        [ ("symbol"  , marketName)
+        , ("price"   , showBarePrice p)
+        , ("quantity", showBareVol v)
+        , ("type"    , case side of {Bid -> "buy-limit"; Ask -> "sell-limit"})
         ]
+
 
 signRequest :: MonadTime m => API_ID -> API_KEY -> Request -> m Request
 signRequest id key request = do
@@ -110,13 +126,16 @@ signRequest id key request = do
     return (setRequestQueryString signedQuery request)
   where
     signQuery :: API_ID -> API_KEY -> MilliEpoch -> Query -> Query
-    signQuery id key now query = undefined
+    signQuery id key now query = 
+        let strQuery = fmap toStr query
 
-
--- toQueryItem:: (ByteString, String) -> (ByteString, Maybe ByteString)
-toQueryItem (a, b) = (a, Just $ pack b)
-
-
+            signedQuery = ("sign", sig) : msg'  
+            msg' = ("apiid", getID id) : ("timestamp", showBareMilliEpoch now) : strQuery
+            sig = md5 $ intercalate "&" $ sort $ fmap (fmap toUpper . pairUp) (("secret", getKey key) : msg')
+            pairUp (x,y) = x ++ "=" ++ y
+            md5 x = x
+         in traceShowId $ fmap fromStr signedQuery
+      
 
 
 -- The items in the sign_list include the `apiid` and the `secret` key

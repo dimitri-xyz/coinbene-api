@@ -40,19 +40,19 @@ instance ParsePayload (NoPayload a b) where
 
 instance ( FromJSON   p
          , Generic    p
-         , CoinSymbol p
+         , Coin       p
          , FromJSON   v
          , Generic    v
-         , CoinSymbol v
+         , Coin       v
          ) => ParsePayload (QuoteBookPayload p v) where
     parsePayload = parseQuoteBookPayload
 
 instance (FromJSON    p
          , Generic    p
-         , CoinSymbol p
+         , Coin       p
          , FromJSON   v
          , Generic    v
-         , CoinSymbol v
+         , Coin       v
          , ParsePayload (QuoteBookPayload p v)) 
          => FromJSON (Resp QuoteBookPayload p v) where
     parseJSON (Object h) = do
@@ -69,10 +69,10 @@ instance (FromJSON    p
 parseQuoteBookPayload :: forall p v.
         ( FromJSON   p
         , Generic    p
-        , CoinSymbol p
+        , Coin       p
         , FromJSON   v
         , Generic    v
-        , CoinSymbol v
+        , Coin       v
         ) => Object -> Parser (QuoteBookPayload p v)
 parseQuoteBookPayload h = do
     mBook   <- h .:? "orderbook"

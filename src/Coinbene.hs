@@ -10,14 +10,23 @@ import GHC.Generics
 import Data.Aeson
 
 -----------------------------------------
-class (Generic coin, FromJSON coin) => CoinSymbol coin where
+class (Generic coin, FromJSON coin) => Coin coin where
   coinSymbol :: coin -> String
+  showBare   :: coin -> String
 
 -----------------------------------------
 -- Units
 newtype Vol   a = Vol   a deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
 newtype Price a = Price a deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
 newtype Cost  a = Cost  a deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
+
+-- For showing the values without the constructor
+showBarePrice :: Coin p => Price p -> String
+showBareVol   :: Coin p => Vol   p -> String
+showBareCost  :: Coin p => Cost  p -> String
+showBarePrice (Price p) = showBare p
+showBareVol   (Vol   v) = showBare v
+showBareCost  (Cost  c) = showBare c
 
 instance (Generic a, FromJSON a) => FromJSON (Price a)
 instance (Generic a, FromJSON a) => FromJSON (Vol   a)
@@ -29,6 +38,10 @@ instance (Generic a, ToJSON   a) => ToJSON   (Cost  a)
 -----------------------------------------
 
 newtype MilliEpoch = MilliEpoch Word64 deriving (Show, Eq, Ord, Generic, Num, Real, Enum, Integral)
+
+showBareMilliEpoch :: MilliEpoch -> String
+showBareMilliEpoch (MilliEpoch w) = show w
+
 instance FromJSON MilliEpoch
 instance ToJSON   MilliEpoch
 

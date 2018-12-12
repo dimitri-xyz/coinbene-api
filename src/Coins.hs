@@ -7,7 +7,7 @@ import GHC.Generics
 import Data.Scientific
 import Data.Aeson
 
-import Coinbene (CoinSymbol, coinSymbol)
+import Coinbene (Coin, coinSymbol, showBare)
 
 -------------------
 newtype BTC  = BTC  Scientific deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)
@@ -33,13 +33,22 @@ instance FromJSON USDT
 instance ToJSON   USDT
 
 -------------------
-instance CoinSymbol BTC where
-  coinSymbol _ = "BTC"
-instance CoinSymbol BRL where
-  coinSymbol _ = "BRL"
-instance CoinSymbol LTC where
-  coinSymbol _ = "LTC"
-instance CoinSymbol ETH where
-  coinSymbol _ = "ETH"
-instance CoinSymbol USDT where
-  coinSymbol _ = "USDT"
+instance Coin BTC where
+  coinSymbol _     = "BTC"
+  showBare (BTC x) = show x
+
+instance Coin BRL where
+  coinSymbol _     = "BRL"
+  showBare (BRL x) = show x
+
+instance Coin LTC where
+  coinSymbol _     = "LTC"
+  showBare (LTC x) = show x
+
+instance Coin ETH where
+  coinSymbol _     = "ETH"
+  showBare (ETH x) = show x
+
+instance Coin USDT where
+  coinSymbol _      = "USDT"
+  showBare (USDT x) = show x
