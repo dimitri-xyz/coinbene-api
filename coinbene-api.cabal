@@ -40,6 +40,8 @@ library
     , scientific
     , monad-time
     , time
+    , cryptonite
+    , unordered-containers
   default-language: Haskell2010
 
 executable coinbene-api-exe

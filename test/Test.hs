@@ -27,8 +27,8 @@ tests = testGroup "\nAPI test cases"
   , testCase "live BTCBRL place limit" $ do
         manager  <- newManager tlsManagerSettings
         let coinbene = Coinbene manager (API_ID "deadbeef1234") (API_KEY "adda54321")
-        oid <- placeLimit coinbene Ask (Price 999999 :: Price BRL) (Vol 1 :: Vol BTC)
-        assertBool "done!" $ False
+        oid <- placeLimit coinbene Ask (Price 99999999 :: Price BRL) (Vol 0.004 :: Vol BTC)
+        assertBool (show oid) $ False
 
   , testCase "live BTCBRL orderbook parsing" $ do
         manager  <- newManager tlsManagerSettings

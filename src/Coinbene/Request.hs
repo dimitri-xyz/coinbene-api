@@ -14,6 +14,7 @@ import           Network.HTTP.Types.Status          (statusCode)
 import qualified Data.ByteString.Lazy.Char8 as LBS  (ByteString, pack, unpack)
 import           Data.ByteString.Char8              (ByteString, pack, unpack)
 import           Data.Aeson
+import           Data.HashMap.Strict                (fromList)
 
 import           Data.Maybe                         (fromMaybe)
 import           Data.Char                          (toUpper, isDigit)
@@ -21,6 +22,8 @@ import           Data.List                          (intercalate, sort, dropWhil
 
 import           Control.Monad.Time                 (MonadTime, currentTime)
 import           Data.Time.Clock.POSIX              (utcTimeToPOSIXSeconds)
+
+import           Crypto.Hash
 
 import           Coinbene
 import           Coinbene.Parse
@@ -36,7 +39,7 @@ instance HTTP IO where
 
 data OrderSide  = Bid | Ask deriving Show
 
-newtype OrderID = OrderID String
+newtype OrderID = OrderID String deriving Show
 type Confirmation = OrderID
 
 class Exchange config m where
@@ -62,11 +65,8 @@ instance Exchange Coinbene IO where
 marketSymbol :: forall p v. (Coin p, Coin v) => Price p -> Vol v -> String
 marketSymbol p v = coinSymbol (undefined :: v) ++ coinSymbol (undefined :: p)
 
-toStr :: (ByteString, Maybe ByteString) -> (String, String)
-toStr (x, mY) = (unpack x, unpack $ fromMaybe "" mY)
-
-fromStr :: (String, String) -> (ByteString, Maybe ByteString)
-fromStr (x,  y) = (pack x  , Just $ pack y)
+strToQuery :: (String, String) -> (ByteString, Maybe ByteString)
+strToQuery (x, y) = (pack x, Just $ pack y)
 
 coinbeneRequest
     = setRequestHost "api.coinbene.com"
@@ -88,67 +88,49 @@ getCoinbeneBook config depth p v = do
     request
         = setRequestMethod "GET"
         $ setRequestPath "/v1/market/orderbook"
-        $ setRequestQueryString query
+        $ setRequestHeaders [("Content-Type","application/x-www-form-urlencoded;charset=utf-8"),("Connection","keep-alive")]
+        $ setRequestQueryString (fmap strToQuery query)
         $ coinbeneRequest
 
-    query = map fromStr $
+    query =
         [ ("symbol", marketName)
-        , ("depth", show depth)]
+        , ("depth", show depth)
+        ]
 
 
 placeCoinbeneLimit :: forall m p v.
     ( HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> OrderSide -> Price p -> Vol v -> m (Confirmation)
 placeCoinbeneLimit config side p v = do
-    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) request
-    response <- http signedReq (getManager config)
-    return $ error ("placeCoinbeneLimit: " ++ " response: " ++ show response)
+    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
+    response <- http (traceShowId signedReq) (getManager config)
+    return $ OrderID (show response)
   where
     marketName = marketSymbol (undefined :: Price p) (undefined :: Vol v)
     request
         = setRequestMethod "POST"
         $ setRequestPath "/v1/trade/order/place"
-        $ setRequestQueryString query
+        $ setRequestHeaders [("Content-Type","application/json;charset=utf-8"),("Connection","keep-alive")]
         $ coinbeneRequest
 
-    query = map fromStr $
+    params =
         [ ("symbol"  , marketName)
         , ("price"   , showBarePrice p)
-        , ("quantity", showBareVol v)
+        , ("quantity", showBareVol   v)
         , ("type"    , case side of {Bid -> "buy-limit"; Ask -> "sell-limit"})
         ]
 
 
-signRequest :: MonadTime m => API_ID -> API_KEY -> Request -> m Request
-signRequest id key request = do
+signRequest :: MonadTime m => API_ID -> API_KEY -> [(String, String)] -> Request -> m Request
+signRequest id key params request = do
     now <- fmap (MilliEpoch . truncate . (1000*) . realToFrac . utcTimeToPOSIXSeconds) currentTime
-    let signedQuery = signQuery id key now (getRequestQueryString request)
-    return (setRequestQueryString signedQuery request)
+    let signedParams = signParams id key now params
+    return $ setRequestBodyJSON (fromList signedParams) request
   where
-    signQuery :: API_ID -> API_KEY -> MilliEpoch -> Query -> Query
-    signQuery id key now query = 
-        let strQuery = fmap toStr query
-
-            signedQuery = ("sign", sig) : msg'  
-            msg' = ("apiid", getID id) : ("timestamp", showBareMilliEpoch now) : strQuery
-            sig = md5 $ intercalate "&" $ sort $ fmap (fmap toUpper . pairUp) (("secret", getKey key) : msg')
+    signParams :: API_ID -> API_KEY -> MilliEpoch -> [(String, String)] -> [(String, String)]
+    signParams id key now params =
+        let msg = ("apiid", getID id) : ("timestamp", showBareMilliEpoch now) : params
+            sig = md5 $ intercalate "&" $ sort $ fmap (fmap toUpper . pairUp) (("secret", getKey key) : msg)
             pairUp (x,y) = x ++ "=" ++ y
-            md5 x = x
-         in traceShowId $ fmap fromStr signedQuery
-      
-
-
--- The items in the sign_list include the `apiid` and the `secret` key
--- def sign(**kwargs):
---     """
---     将传入的参数生成列表形式，排序后用＆拼接成字符串，用hashbli加密成生sign
---     """
---     sign_list = []
---     for key, value in kwargs.items():
---         sign_list.append("{}={}".format(key, value))
---     sign_list.sort()
---     sign_str = "&".join(sign_list)
---     mysecret = sign_str.upper().encode()
---     m = hashlib.md5()
---     m.update(mysecret)
---     return m.hexdigest()
+            md5 x = show (hashWith MD5 (pack x))
+         in traceShowId $ ("sign", sig) : msg
