@@ -40,7 +40,7 @@ tests = testGroup "\nAPI test cases"
 
 ---------------------------------------
 -- Benchmark orderbook parsing test
-sampleResponse :: Resp QuoteBookPayload BRL BTC
+sampleResponse :: Resp (QuoteBookPayload BRL BTC)
 sampleResponse = RespOK 
     { rPayload = BookPayload 
       { bpOrderbook = QuoteBook
@@ -65,7 +65,7 @@ encodedSampleResponse = "{\"symbol\":\"BTCBRL\",\"orderbook\":{\"bids\":[{\"quan
 
 ---------------------------------------
 -- Error response parsing test
-sampleRespError :: Resp QuoteBookPayload BRL BTC 
+sampleRespError :: Resp (QuoteBookPayload BRL BTC)
 sampleRespError = RespError
     { rDescription = "some error"
     , rTimestamp   = 1234

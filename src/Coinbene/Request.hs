@@ -83,7 +83,7 @@ getCoinbeneBook config depth p v = do
     response <- http request (getManager config)
     case eitherDecode (responseBody response) of
         Left errMsg -> error ("getCoinbeneBook: " ++ errMsg ++ " response: " ++ show response) -- FIX ME! should not use `error` here
-        Right resp  -> return $ bpOrderbook $ rPayload resp
+        Right resp  -> return $ bpOrderbook $ rPayload resp -- FIX ME! May fail on RespError
   where
     marketName = marketSymbol (undefined :: Price p) (undefined :: Vol v)
     request
@@ -105,7 +105,10 @@ placeCoinbeneLimit :: forall m p v.
 placeCoinbeneLimit config side p v = do
     signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
     response <- http (traceShowId signedReq) (getManager config)
-    return $ OrderID (show response)
+    -- return $ OrderID (show response)
+    case eitherDecode (responseBody response) of
+        Left errMsg -> error ("placeCoinbeneLimit: " ++ errMsg ++ " response: " ++ show response) -- FIX ME! should not use `error` here
+        Right resp  -> return $ (\(OIDPayload x) -> x) $ rPayload resp -- FIX ME! May fail on RespError
   where
     marketName = marketSymbol (undefined :: Price p) (undefined :: Vol v)
     request
