@@ -1,58 +1,68 @@
--- {-# LANGUAGE OverloadedStrings #-}
--- import qualified Data.ByteString.Lazy.Char8 as L8
--- import           Network.HTTP.Client        (defaultManagerSettings, newManager)
--- import           Network.HTTP.Client.TLS    (tlsManagerSettings)
--- import           Network.HTTP.Simple
+{-# LANGUAGE ScopedTypeVariables #-}
 
--- main :: IO ()
--- main = do
---     manager <- newManager tlsManagerSettings
+module Main where
 
---     let request = setRequestManager manager "https://httpbin.org/get"
---     response <- httpLBS request
+import Control.Concurrent           (threadDelay)
+import Control.Concurrent.Async     (async, link)
+import Control.Monad                (forever)
+import Data.Foldable                (foldl')
+import Text.Printf                  (printf)
 
---     putStrLn $ "The status code was: " ++
---                show (getResponseStatusCode response)
---     print $ getResponseHeader "Content-Type" response
---     L8.putStrLn $ getResponseBody response
+import Network.HTTP.Client          (newManager)
+import Network.HTTP.Client.TLS      (tlsManagerSettings)
 
-
-
-
-
-{-# LANGUAGE OverloadedStrings #-}
-import           Data.Aeson            (Value)
-import qualified Data.ByteString.Char8 as S8
-import qualified Data.Yaml             as Yaml
-import           Network.HTTP.Simple
-import           Network.HTTP.Client
+import Coinbene
 
 main :: IO ()
 main = do
-    request' <- parseRequest "POST http://httpbin.org/post"
-    let request
-            = setRequestMethod "POST"
-            $ setRequestPath "/post"
-            $ setRequestQueryString [("hello", Just "world"),("this is", Just "Nice!")]
-            $ setRequestBodyLBS "This is my request body"
-            $ setRequestSecure True
-            $ setRequestPort 443
-            $ request'
-    putStrLn $ show request
-    putStrLn $ S8.unpack $ (queryString request)
-    response <- httpJSON request
-    putStrLn $ show response
 
-    putStrLn $ "The status code was: " ++
-               show (getResponseStatusCode response)
-    print $ getResponseHeader "Content-Type" response
-    S8.putStrLn $ Yaml.encode (getResponseBody response :: Value)
+    putStrLn "--------------------------- Starting --------------------------------"
+    putStrLn "Type <ENTER> to quit"
+    putStrLn "---------------------------------------------------------------------"
+    putStrLn "\n"
+
+    manager  <- newManager tlsManagerSettings
+    let coinbene = Coinbene manager undefined undefined
+        lines    = 5
+
+    -- start execution thread
+    thread <- async $ forever $ do
+        book <- getBook coinbene (undefined :: Price USDT) (undefined :: Vol BTC)
+        putStr $ backtrackCursor $ showTopN lines book
+        threadDelay 1500000
+  
+    -- propagate exceptions to this thread
+    link thread
+    
+    -- run until users presses <ENTER> key
+    keyboardWait 
+
+    -- move screen cursor past last update
+    putStrLn $ take (2 * lines + 3) $ repeat '\n' 
 
 
--- module Main where
 
--- import Coinbene
+--------------------------------------------------------------------------------
+keyboardWait :: IO ()
+keyboardWait = getLine >> return () 
 
--- main :: IO ()
--- main = putStrLn "Hi!"
+-- | Show top N bids and asks
+showTopN :: forall p v. (Coin p, Coin v, Show p, Show v) => Int -> QuoteBook p v -> String
+showTopN n book 
+    =  coinSymbol (undefined :: v) ++ coinSymbol (undefined :: p) ++ " market:\n"
+    ++ "--------------\n\n"
+    ++ concatMap formatRow asks'
+    ++ "   ---      --------------------      --------------------\n"
+    ++ concatMap formatRow bids'
+  where
+    bids' = fmap (\b -> ("  BID", bqPrice b, bqQuantity b))           $ take n $ qbBids book
+    asks' = fmap (\a -> ("  ASK", aqPrice a, aqQuantity a)) $ reverse $ take n $ qbAsks book
+    formatRow :: (Show p, Show v) => (String, Price p, Vol v) -> String
+    formatRow (s, p, v) = printf " %s    %22s    %22s                 \n" s (show v) (show p)
 
+
+-- | (on ANSI terminals) Backtracks cursor as many lines as the string has
+backtrackCursor :: String -> String
+backtrackCursor ss =
+    let newLines = foldl' (\count char -> if char == '\n' then (count + 1) else count) (0::Int) ss
+     in ss ++ "\ESC[" ++ show newLines ++ "A"
