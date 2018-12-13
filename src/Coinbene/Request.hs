@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Coinbene.Request where
 
@@ -25,7 +27,7 @@ import           Data.Time.Clock.POSIX              (utcTimeToPOSIXSeconds)
 
 import           Crypto.Hash
 
-import           Coinbene
+import           Coinbene.Core
 import           Coinbene.Parse
 
 import Debug.Trace
@@ -39,7 +41,6 @@ instance HTTP IO where
 
 data OrderSide  = Bid | Ask deriving Show
 
-newtype OrderID = OrderID String deriving Show
 type Confirmation = OrderID
 
 class Exchange config m where

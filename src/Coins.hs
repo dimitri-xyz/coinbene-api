@@ -7,7 +7,7 @@ import GHC.Generics
 import Data.Scientific
 import Data.Aeson
 
-import Coinbene (Coin, coinSymbol, showBare)
+import Coinbene.Core (Coin, coinSymbol, showBare)
 
 -------------------
 newtype BTC  = BTC  Scientific deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Generic)

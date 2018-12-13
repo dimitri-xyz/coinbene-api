@@ -10,7 +10,7 @@ import GHC.Generics
 import Data.Aeson
 import Data.Aeson.Types             (Object, Parser)
 
-import Coinbene
+import Coinbene.Core
 
 -----------------------------------------
 data Resp tail p v
@@ -32,29 +32,19 @@ data QuoteBookPayload p v
 
 data NoPayload a b = NoPayload deriving (Show, Eq, Generic)
 
+data OIDPayload = OIDPayload OrderID deriving (Show, Eq, Generic)
+
 class ParsePayload a where
     parsePayload :: Object -> Parser a
 -----------------------------------------
 instance ParsePayload (NoPayload a b) where
     parsePayload _ = pure NoPayload 
 
-instance ( FromJSON   p
-         , Generic    p
-         , Coin       p
-         , FromJSON   v
-         , Generic    v
-         , Coin       v
-         ) => ParsePayload (QuoteBookPayload p v) where
+instance ( FromJSON p, FromJSON v, Generic p, Generic v, Coin p, Coin v) => ParsePayload (QuoteBookPayload p v) where
     parsePayload = parseQuoteBookPayload
 
-instance (FromJSON    p
-         , Generic    p
-         , Coin       p
-         , FromJSON   v
-         , Generic    v
-         , Coin       v
-         , ParsePayload (QuoteBookPayload p v)) 
-         => FromJSON (Resp QuoteBookPayload p v) where
+instance (FromJSON p, FromJSON v, Generic p, Generic v, Coin p, Coin v, ParsePayload (payload p v)) 
+    => FromJSON (Resp payload p v) where
     parseJSON (Object h) = do
         status <- h .: "status"
         case (status :: String) of
@@ -65,6 +55,23 @@ instance (FromJSON    p
                 <$> h .: "description"
                 <*> h .: "timestamp"
             _ -> fail ("parseJSON - Unknown response status code:" ++ status)
+
+-- parseResponse :: (FromJSON p, FromJSON v, Generic p, Generic v, Coin p, Coin v, ParsePayload (QuoteBookPayload p v)) 
+--     => FromJSON (Resp QuoteBookPayload p v) where
+--     parseJSON (Object h) = do
+--         status <- h .: "status"
+--         case (status :: String) of
+--             "ok" -> RespOK
+--                 <$> parsePayload h
+--                 <*> h .: "timestamp"
+--             "error" -> RespError
+--                 <$> h .: "description"
+--                 <*> h .: "timestamp"
+--             _ -> fail ("parseJSON - Unknown response status code:" ++ status)
+
+
+
+
 
 parseQuoteBookPayload :: forall p v.
         ( FromJSON   p

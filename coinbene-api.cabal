@@ -27,6 +27,7 @@ library
       Coinbene.Request
   other-modules:
       Paths_coinbene_api
+      Coinbene.Core
   hs-source-dirs:
       src
   build-depends:
