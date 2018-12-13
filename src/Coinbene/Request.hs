@@ -76,14 +76,21 @@ coinbeneRequest
     $ defaultRequest
 
 
+-- FIX ME! should not use `error` here. This is not programmer error, but a possible run-time exception
+decodeResponse :: ParsePayload payload => String -> Response LBS.ByteString -> payload
+decodeResponse errFunctionName response = case eitherDecode' (responseBody response) of
+    Left errMsg -> error (errFunctionName ++ ": " ++ errMsg ++ " - response: " ++ show response) 
+    Right resp  -> case resp of
+                        RespOK payload time -> payload
+                        RespError desc time -> error (errFunctionName ++ ": " ++ desc ++ " - response: " ++ show response)
+
+
 getCoinbeneBook :: forall m p v.
     ( HTTP m, Coin p, Coin v)
     => Coinbene -> Int -> Price p -> Vol v -> m (QuoteBook p v)
 getCoinbeneBook config depth p v = do
     response <- http request (getManager config)
-    case eitherDecode (responseBody response) of
-        Left errMsg -> error ("getCoinbeneBook: " ++ errMsg ++ " response: " ++ show response) -- FIX ME! should not use `error` here
-        Right resp  -> return $ bpOrderbook $ rPayload resp -- FIX ME! May fail on RespError
+    return $ bpOrderbook $ decodeResponse "getCoinbeneBook" response
   where
     marketName = marketSymbol (undefined :: Price p) (undefined :: Vol v)
     request
@@ -98,17 +105,14 @@ getCoinbeneBook config depth p v = do
         , ("depth", show depth)
         ]
 
-
 placeCoinbeneLimit :: forall m p v.
     ( HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> OrderSide -> Price p -> Vol v -> m (Confirmation)
 placeCoinbeneLimit config side p v = do
     signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
     response <- http (traceShowId signedReq) (getManager config)
-    -- return $ OrderID (show response)
-    case eitherDecode (responseBody response) of
-        Left errMsg -> error ("placeCoinbeneLimit: " ++ errMsg ++ " response: " ++ show response) -- FIX ME! should not use `error` here
-        Right resp  -> return $ (\(OIDPayload x) -> x) $ rPayload resp -- FIX ME! May fail on RespError
+    return $ (\(OIDPayload x) -> x) $ decodeResponse "placeCoinbeneLimit" response
+
   where
     marketName = marketSymbol (undefined :: Price p) (undefined :: Vol v)
     request
