@@ -39,13 +39,10 @@ class Monad m => HTTP m where
 instance HTTP IO where
     http = httpLbs
 
-data OrderSide  = Bid | Ask deriving Show
-
-type Confirmation = OrderID
-
 class Exchange config m where
-    placeLimit :: ( HTTP m, MonadTime m, Coin p, Coin v) => config -> OrderSide -> Price p -> Vol v -> m Confirmation
-    getBook    :: ( HTTP m, MonadTime m, Coin p, Coin v) => config              -> Price p -> Vol v -> m (QuoteBook p v)
+    placeLimit    :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> OrderSide -> Price p -> Vol v -> m OrderID
+    getBook       :: (HTTP m, MonadTime m, Coin p, Coin v) => config              -> Price p -> Vol v -> m (QuoteBook p v)
+    getOrderInfo  :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderInfo
 
 
 newtype API_ID  = API_ID  {getID  :: String} 
@@ -60,6 +57,7 @@ data Coinbene = Coinbene
 instance Exchange Coinbene IO where
     placeLimit     = placeCoinbeneLimit
     getBook config = getCoinbeneBook config 200
+    getOrderInfo   = getCoinbeneOrderInfo
 
 
 -----------------------------------------
@@ -107,10 +105,10 @@ getCoinbeneBook config depth p v = do
 
 placeCoinbeneLimit :: forall m p v.
     ( HTTP m, MonadTime m, Coin p, Coin v)
-    => Coinbene -> OrderSide -> Price p -> Vol v -> m (Confirmation)
+    => Coinbene -> OrderSide -> Price p -> Vol v -> m (OrderID)
 placeCoinbeneLimit config side p v = do
     signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
-    response <- http (traceShowId signedReq) (getManager config)
+    response <- http signedReq (getManager config)
     return $ (\(OIDPayload x) -> x) $ decodeResponse "placeCoinbeneLimit" response
 
   where
@@ -141,4 +139,20 @@ signRequest id key params request = do
             sig = md5 $ intercalate "&" $ sort $ fmap (fmap toUpper . pairUp) (("secret", getKey key) : msg)
             pairUp (x,y) = x ++ "=" ++ y
             md5 x = show (hashWith MD5 (pack x))
-         in traceShowId $ ("sign", sig) : msg
+         in ("sign", sig) : msg
+
+
+getCoinbeneOrderInfo :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderInfo
+getCoinbeneOrderInfo config (OrderID oid) = do
+    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
+    response <- http (traceShowId signedReq) (getManager config)
+    return $ (\(OrderInfoPayload x) -> x) $ decodeResponse "getCoinbeneOrderInfo" $ traceShowId response
+
+  where
+    request
+        = setRequestMethod "POST"
+        $ setRequestPath "/v1/trade/order/info"
+        $ setRequestHeaders [("Content-Type","application/json;charset=utf-8"),("Connection","keep-alive")]
+        $ coinbeneRequest
+
+    params = [("orderid"  , oid)]

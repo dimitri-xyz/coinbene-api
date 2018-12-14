@@ -30,7 +30,8 @@ data QuoteBookPayload p v
     , bpSymbol :: String
     } deriving (Show, Eq, Generic)
 
-newtype OIDPayload = OIDPayload OrderID deriving (Show, Eq, Generic)
+newtype OIDPayload       = OIDPayload         OrderID deriving (Show, Eq, Generic)
+newtype OrderInfoPayload = OrderInfoPayload OrderInfo deriving (Show, Generic)
 
 -----------------------------------------
 class ParsePayload a where
@@ -74,3 +75,6 @@ parseQuoteBookPayload h = do
 
 instance ParsePayload OIDPayload where
     parsePayload h = fmap OIDPayload (h .: "orderid")
+
+instance ParsePayload OrderInfoPayload where
+    parsePayload h = fmap OrderInfoPayload (h .: "order")

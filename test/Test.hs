@@ -24,18 +24,23 @@ tests = testGroup "\nAPI test cases"
         let mSampleError = decode encodedsampleRespError
         mSampleError @?= Just sampleRespError
 
-  , testCase "live BTCBRL place limit" $ do
-        manager  <- newManager tlsManagerSettings
-        let coinbene = Coinbene manager (API_ID "deadbeef1234") (API_KEY "adda54321")
-        oid <- placeLimit coinbene Ask (Price 99999999 :: Price BRL) (Vol 0.001 :: Vol BTC)
-        assertBool (show oid) $ False
-
   , testCase "live BTCBRL orderbook parsing" $ do
         manager  <- newManager tlsManagerSettings
         let coinbene = Coinbene manager undefined undefined
         book <- getBook coinbene (undefined :: Price BRL) (undefined :: Vol BTC)
         assertBool (show book) $ False
 
+  , testCase "live BTCBRL place limit" $ do
+        manager  <- newManager tlsManagerSettings
+        let coinbene = Coinbene manager (API_ID "deadbeef1234") (API_KEY "adda54321")
+        oid <- placeLimit coinbene Ask (Price 9999999 :: Price BRL) (Vol 0.001 :: Vol BTC)
+        assertBool (show oid) $ False
+
+  , testCase "live get order info" $ do
+        manager  <- newManager tlsManagerSettings
+        let coinbene = Coinbene manager (API_ID "deadbeef1234") (API_KEY "adda54321")
+        info <- getOrderInfo coinbene (OrderID "201812150426145280027052") -- "201812140948258120019452"
+        assertBool (show info) $ False
   ]
 
 ---------------------------------------
