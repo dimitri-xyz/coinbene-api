@@ -39,8 +39,16 @@ tests = testGroup "\nAPI test cases"
   , testCase "live get order info" $ do
         manager  <- newManager tlsManagerSettings
         let coinbene = Coinbene manager (API_ID "deadbeef1234") (API_KEY "adda54321")
-        info <- getOrderInfo coinbene (OrderID "201812150426145280027052") -- "201812140948258120019452"
+        info <- getOrderInfo coinbene (OrderID "201812150426145280027052")
         assertBool (show info) $ False
+
+  , testCase "live BTCBRL place and cancel order" $ do
+        manager  <- newManager tlsManagerSettings
+        let coinbene = Coinbene manager (API_ID "deadbeef1234") (API_KEY "adda54321")
+        oid  <- placeLimit coinbene Ask (Price 9999999 :: Price BRL) (Vol 0.001 :: Vol BTC)
+        oid' <- cancel coinbene oid
+        assertBool (show oid ++ ", " ++ show oid') $ False
+
   ]
 
 ---------------------------------------

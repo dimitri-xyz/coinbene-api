@@ -43,7 +43,7 @@ class Exchange config m where
     placeLimit    :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> OrderSide -> Price p -> Vol v -> m OrderID
     getBook       :: (HTTP m, MonadTime m, Coin p, Coin v) => config              -> Price p -> Vol v -> m (QuoteBook p v)
     getOrderInfo  :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderInfo
-
+    cancel        :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderID
 
 newtype API_ID  = API_ID  {getID  :: String} 
 newtype API_KEY = API_KEY {getKey :: String}
@@ -58,6 +58,7 @@ instance Exchange Coinbene IO where
     placeLimit     = placeCoinbeneLimit
     getBook config = getCoinbeneBook config 200
     getOrderInfo   = getCoinbeneOrderInfo
+    cancel         = cancelCoinbeneOrder
 
 
 -----------------------------------------
@@ -88,7 +89,7 @@ getCoinbeneBook :: forall m p v.
     => Coinbene -> Int -> Price p -> Vol v -> m (QuoteBook p v)
 getCoinbeneBook config depth p v = do
     response <- http request (getManager config)
-    return $ bpOrderbook $ decodeResponse "getCoinbeneBook" response
+    return $ bpOrderbook $ decodeResponse "getCoinbeneBook" $ traceShowId response
   where
     marketName = marketSymbol (undefined :: Price p) (undefined :: Vol v)
     request
@@ -156,3 +157,20 @@ getCoinbeneOrderInfo config (OrderID oid) = do
         $ coinbeneRequest
 
     params = [("orderid"  , oid)]
+
+
+cancelCoinbeneOrder :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderID
+cancelCoinbeneOrder config (OrderID oid) = do
+    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
+    response <- http (traceShowId signedReq) (getManager config)
+    return $ (\(OIDPayload x) -> x) $ decodeResponse "cancelCoinbeneOrder" $ traceShowId response
+
+  where
+    request
+        = setRequestMethod "POST"
+        $ setRequestPath "/v1/trade/order/cancel"
+        $ setRequestHeaders [("Content-Type","application/json;charset=utf-8"),("Connection","keep-alive")]
+        $ coinbeneRequest
+
+    params = [("orderid"  , oid)]
+
