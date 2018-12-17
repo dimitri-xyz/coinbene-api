@@ -7,12 +7,16 @@
 module Coinbene.Parse where
 
 import GHC.Generics
+import Data.Proxy
 import Data.Aeson
 import Data.Aeson.Types             (Object, Parser)
 
 import Coinbene.Core
 
 -----------------------------------------
+marketSymbol :: forall p v. (Coin p, Coin v) => Proxy (Price p) -> Proxy (Vol v) -> String
+marketSymbol p v = coinSymbol (Proxy :: Proxy v) ++ coinSymbol (Proxy :: Proxy p)
+
 data Resp payload
   = RespOK
     { rPayload :: payload
@@ -66,7 +70,7 @@ parseQuoteBookPayload h = do
     mBook   <- h .:? "orderbook"
     mSymbol <- h .:? "symbol"
     case (mBook, mSymbol) of
-        (Just b, Just s) -> let expectedMarket = coinSymbol (undefined :: v) ++ coinSymbol (undefined :: p) 
+        (Just b, Just s) -> let expectedMarket = marketSymbol  (Proxy :: Proxy (Price p)) (Proxy :: Proxy (Vol v))  
                              in if s == expectedMarket
                                     then return (BookPayload b s)
                                     else fail $ "parseQuoteBookPayload obtained data for: `" ++ s ++ 

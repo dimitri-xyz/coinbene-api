@@ -3,6 +3,7 @@
 import Test.Tasty
 import Test.Tasty.HUnit
 
+import Data.Proxy
 import Data.Aeson
 import Coinbene
 import Coinbene.Parse
@@ -27,7 +28,7 @@ tests = testGroup "\nAPI test cases"
   , testCase "live BTCBRL orderbook parsing" $ do
         manager  <- newManager tlsManagerSettings
         let coinbene = Coinbene manager undefined undefined
-        book <- getBook coinbene (undefined :: Price BRL) (undefined :: Vol BTC)
+        book <- getBook coinbene (Proxy :: Proxy (Price BRL)) (Proxy :: Proxy (Vol BTC))
         assertBool (show book) $ False
 
   , testCase "live BTCBRL place limit" $ do

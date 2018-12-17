@@ -8,12 +8,13 @@ import Data.Word                    (Word64)
 import Data.Char                    (toLower)
 import GHC.Generics
 import Data.Aeson
+import Data.Proxy
 
 import Data.Scientific
 
 -----------------------------------------
 class (Generic coin, FromJSON coin) => Coin coin where
-  coinSymbol :: coin -> String
+  coinSymbol :: Proxy coin -> String
   showBare   :: coin -> String
 
 -----------------------------------------

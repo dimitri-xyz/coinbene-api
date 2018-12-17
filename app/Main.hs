@@ -6,6 +6,7 @@ import Control.Concurrent           (threadDelay)
 import Control.Concurrent.Async     (async, link)
 import Control.Monad                (forever)
 import Data.Foldable                (foldl')
+import Data.Proxy                   (Proxy(..))
 import Text.Printf                  (printf)
 
 import Network.HTTP.Client          (newManager)
@@ -27,7 +28,7 @@ main = do
 
     -- start execution thread
     thread <- async $ forever $ do
-        book <- getBook coinbene (undefined :: Price USDT) (undefined :: Vol BTC)
+        book <- getBook coinbene (Proxy :: Proxy (Price USDT)) (Proxy :: Proxy (Vol BTC))
         putStr $ backtrackCursor $ showTopN lines book
         threadDelay 1500000
   
@@ -49,7 +50,7 @@ keyboardWait = getLine >> return ()
 -- | Show top N bids and asks
 showTopN :: forall p v. (Coin p, Coin v, Show p, Show v) => Int -> QuoteBook p v -> String
 showTopN n book 
-    =  coinSymbol (undefined :: v) ++ coinSymbol (undefined :: p) ++ " market:\n"
+    =  coinSymbol (Proxy :: Proxy v) ++ coinSymbol (Proxy :: Proxy p) ++ " market:\n"
     ++ "--------------\n\n"
     ++ concatMap formatRow asks'
     ++ "   ---      --------------------      --------------------\n"

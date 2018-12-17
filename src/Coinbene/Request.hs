@@ -8,8 +8,8 @@ module Coinbene.Request where
 
 import           GHC.Generics
 
-import           Network.HTTP.Simple                        hiding (httpLbs)
-import           Network.HTTP.Client
+import           Network.HTTP.Simple                        hiding (httpLbs, Proxy)
+import           Network.HTTP.Client                        hiding (Proxy)
 import           Network.HTTP.Client.TLS            (tlsManagerSettings)
 import           Network.HTTP.Types.Status          (statusCode)
 
@@ -21,6 +21,7 @@ import           Data.HashMap.Strict                (fromList)
 import           Data.Maybe                         (fromMaybe)
 import           Data.Char                          (toUpper, isDigit)
 import           Data.List                          (intercalate, sort, dropWhile)
+import           Data.Proxy                         (Proxy(..))
 
 import           Control.Monad.Time                 (MonadTime, currentTime)
 import           Data.Time.Clock.POSIX              (utcTimeToPOSIXSeconds)
@@ -41,7 +42,7 @@ instance HTTP IO where
 
 class Exchange config m where
     placeLimit    :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> OrderSide -> Price p -> Vol v -> m OrderID
-    getBook       :: (HTTP m, MonadTime m, Coin p, Coin v) => config              -> Price p -> Vol v -> m (QuoteBook p v)
+    getBook       :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> Proxy (Price p) -> Proxy (Vol v) -> m (QuoteBook p v)
     getOrderInfo  :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderInfo
     cancel        :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderID
 
@@ -62,9 +63,6 @@ instance Exchange Coinbene IO where
 
 
 -----------------------------------------
-marketSymbol :: forall p v. (Coin p, Coin v) => Price p -> Vol v -> String
-marketSymbol p v = coinSymbol (undefined :: v) ++ coinSymbol (undefined :: p)
-
 strToQuery :: (String, String) -> (ByteString, Maybe ByteString)
 strToQuery (x, y) = (pack x, Just $ pack y)
 
@@ -86,12 +84,12 @@ decodeResponse errFunctionName response = case eitherDecode' (responseBody respo
 
 getCoinbeneBook :: forall m p v.
     ( HTTP m, Coin p, Coin v)
-    => Coinbene -> Int -> Price p -> Vol v -> m (QuoteBook p v)
+    => Coinbene -> Int -> Proxy (Price p) -> Proxy (Vol v) -> m (QuoteBook p v)
 getCoinbeneBook config depth p v = do
     response <- http request (getManager config)
     return $ bpOrderbook $ decodeResponse "getCoinbeneBook" $ traceShowId response
   where
-    marketName = marketSymbol (undefined :: Price p) (undefined :: Vol v)
+    marketName = marketSymbol p v
     request
         = setRequestMethod "GET"
         $ setRequestPath "/v1/market/orderbook"
@@ -113,7 +111,7 @@ placeCoinbeneLimit config side p v = do
     return $ (\(OIDPayload x) -> x) $ decodeResponse "placeCoinbeneLimit" response
 
   where
-    marketName = marketSymbol (undefined :: Price p) (undefined :: Vol v)
+    marketName = marketSymbol (Proxy :: Proxy (Price p)) (Proxy :: Proxy (Vol v))
     request
         = setRequestMethod "POST"
         $ setRequestPath "/v1/trade/order/place"
