@@ -10,6 +10,7 @@ import GHC.Generics
 import Data.Proxy
 import Data.Aeson
 import Data.Aeson.Types             (Object, Parser)
+import Data.Vector                  (toList) 
 
 import Coinbene.Core
 
@@ -33,6 +34,14 @@ data QuoteBookPayload p v
     { bpOrderbook :: QuoteBook p v
     , bpSymbol :: String
     } deriving (Show, Eq, Generic)
+
+data OpenOrdersPayload 
+  = OpenOrdersPayload
+    { ooOrders   :: [OrderInfo]
+    , ooCount    :: Int
+    , ooPageSize :: Int
+    , ooPage     :: Int
+    } deriving Show
 
 newtype OIDPayload       = OIDPayload         OrderID deriving (Show, Eq, Generic)
 newtype OrderInfoPayload = OrderInfoPayload OrderInfo deriving (Show, Generic)
@@ -82,3 +91,22 @@ instance ParsePayload OIDPayload where
 
 instance ParsePayload OrderInfoPayload where
     parsePayload h = fmap OrderInfoPayload (h .: "order")
+
+-----------------------------------------
+instance ParsePayload OpenOrdersPayload where
+    parsePayload = parseOpenOrdersPayload
+
+parseOpenOrdersPayload :: Object -> Parser OpenOrdersPayload
+parseOpenOrdersPayload h' = do
+    orders' <- h' .: "orders"
+    case orders' of
+        (Object h) -> 
+            OpenOrdersPayload 
+                <$> do
+                    orders <- (h .: "result")
+                    toList <$> withArray "OrderInfo" (mapM parseJSON) orders
+                <*> h .: "totalcount"
+                <*> h .: "pagesize"
+                <*> h .: "page"
+
+        _ -> fail "parseOpenOrdersPayload was unable to find an \"orders\" field in response" 

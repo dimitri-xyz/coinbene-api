@@ -43,6 +43,7 @@ library
     , time
     , cryptonite
     , unordered-containers
+    , vector
   default-language: Haskell2010
 
 executable coinbene-api-exe

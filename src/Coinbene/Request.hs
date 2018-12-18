@@ -43,6 +43,7 @@ instance HTTP IO where
 class Exchange config m where
     placeLimit    :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> OrderSide -> Price p -> Vol v -> m OrderID
     getBook       :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> Proxy (Price p) -> Proxy (Vol v) -> m (QuoteBook p v)
+    getOpenOrders :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
     getOrderInfo  :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderInfo
     cancel        :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderID
 
@@ -60,6 +61,7 @@ instance Exchange Coinbene IO where
     getBook config = getCoinbeneBook config 200
     getOrderInfo   = getCoinbeneOrderInfo
     cancel         = cancelCoinbeneOrder
+    getOpenOrders  = getOpenCoinbeneOrders
 
 
 -----------------------------------------
@@ -172,3 +174,20 @@ cancelCoinbeneOrder config (OrderID oid) = do
 
     params = [("orderid"  , oid)]
 
+
+getOpenCoinbeneOrders :: (HTTP m, MonadTime m, Coin p, Coin v)
+    => Coinbene -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
+getOpenCoinbeneOrders config pp vv = do
+    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
+    response <- http (traceShowId signedReq) (getManager config)
+    return $ ooOrders $ decodeResponse "getOpenCoinbeneOrders" $ traceShowId response
+
+  where
+    marketName = marketSymbol pp vv
+    request
+        = setRequestMethod "POST"
+        $ setRequestPath "/v1/trade/order/open-orders"
+        $ setRequestHeaders [("Content-Type","application/json;charset=utf-8"),("Connection","keep-alive")]
+        $ coinbeneRequest
+
+    params = [("symbol", marketName)]

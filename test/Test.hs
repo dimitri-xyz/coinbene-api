@@ -62,7 +62,7 @@ tests config = testGroup "\nAPI test cases"
 
   , testCase "live BTCBRL place limit" $ do
         coinbene <- config
-        oid <- placeLimit coinbene Ask (Price 9999999 :: Price BRL) (Vol 0.001 :: Vol BTC)
+        oid <- placeLimit coinbene Ask (Price 9997999 :: Price BRL) (Vol 0.001 :: Vol BTC)
         assertBool (show oid) $ False
 
   , testCase "live get order info" $ do
@@ -75,6 +75,11 @@ tests config = testGroup "\nAPI test cases"
         oid  <- placeLimit coinbene Ask (Price 9999999 :: Price BRL) (Vol 0.001 :: Vol BTC)
         oid' <- cancel coinbene oid
         assertBool (show oid ++ ", " ++ show oid') $ False
+
+  , testCase "live get open orders" $ do
+        coinbene <- config
+        infos <- getOpenOrders coinbene (Proxy :: Proxy (Price BRL)) (Proxy :: Proxy (Vol BTC))
+        assertBool (show infos) $ False
 
   ]
 
