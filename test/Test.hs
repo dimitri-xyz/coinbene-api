@@ -2,6 +2,7 @@
 
 import Test.Tasty
 import Test.Tasty.HUnit
+import Test.Tasty.Options
 
 import Data.Proxy
 import Data.Aeson
@@ -13,10 +14,39 @@ import Coins
 import Network.HTTP.Client          (newManager)
 import Network.HTTP.Client.TLS      (tlsManagerSettings)
 
-main = defaultMain tests
+import Debug.Trace
 
-tests :: TestTree
-tests = testGroup "\nAPI test cases"
+instance IsOption API_ID where
+    defaultValue = error "User must supply API ID for authenticated tests."
+    parseValue = Just . API_ID
+    optionName = return "API_ID"
+    optionHelp = return "Customer's API ID for Coinbene account (hex encoded)."
+
+instance IsOption API_KEY where
+    defaultValue = error "User must supply API secret key for authenticated tests."
+    parseValue = Just . API_KEY
+    optionName = return "API_KEY"
+    optionHelp = return "Customer's API secret key for Coinbene account (hex encoded)."
+
+
+main = defaultMainWithIngredients ings $
+    askOption $ \apikey ->
+    askOption $ \apiid -> 
+    withResource (mkConfig apiid apikey) (\_ -> return ()) tests
+  where
+    ings = includingOptions
+        [ (Option (Proxy :: Proxy API_ID))
+        , (Option (Proxy :: Proxy API_KEY))
+        ] : defaultIngredients
+
+    mkConfig apiid apikey = do 
+        manager <- newManager tlsManagerSettings
+        return $ Coinbene manager apiid apikey
+
+
+---------------------------------------
+tests :: IO Coinbene -> TestTree
+tests config = testGroup "\nAPI test cases"
   [ testCase "benchmark orderbook parsing" $ do
         let mSampleResp = decode encodedSampleResponse
         mSampleResp @?= Just sampleResponse
@@ -26,26 +56,22 @@ tests = testGroup "\nAPI test cases"
         mSampleError @?= Just sampleRespError
 
   , testCase "live BTCBRL orderbook parsing" $ do
-        manager  <- newManager tlsManagerSettings
-        let coinbene = Coinbene manager undefined undefined
+        coinbene <- config
         book <- getBook coinbene (Proxy :: Proxy (Price BRL)) (Proxy :: Proxy (Vol BTC))
         assertBool (show book) $ False
 
   , testCase "live BTCBRL place limit" $ do
-        manager  <- newManager tlsManagerSettings
-        let coinbene = Coinbene manager (API_ID "deadbeef1234") (API_KEY "adda54321")
+        coinbene <- config
         oid <- placeLimit coinbene Ask (Price 9999999 :: Price BRL) (Vol 0.001 :: Vol BTC)
         assertBool (show oid) $ False
 
   , testCase "live get order info" $ do
-        manager  <- newManager tlsManagerSettings
-        let coinbene = Coinbene manager (API_ID "deadbeef1234") (API_KEY "adda54321")
+        coinbene <- config
         info <- getOrderInfo coinbene (OrderID "201812150426145280027052")
         assertBool (show info) $ False
 
   , testCase "live BTCBRL place and cancel order" $ do
-        manager  <- newManager tlsManagerSettings
-        let coinbene = Coinbene manager (API_ID "deadbeef1234") (API_KEY "adda54321")
+        coinbene <- config
         oid  <- placeLimit coinbene Ask (Price 9999999 :: Price BRL) (Vol 0.001 :: Vol BTC)
         oid' <- cancel coinbene oid
         assertBool (show oid ++ ", " ++ show oid') $ False

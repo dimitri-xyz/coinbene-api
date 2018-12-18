@@ -46,8 +46,8 @@ class Exchange config m where
     getOrderInfo  :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderInfo
     cancel        :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderID
 
-newtype API_ID  = API_ID  {getID  :: String} 
-newtype API_KEY = API_KEY {getKey :: String}
+newtype API_ID  = API_ID  {getID  :: String} deriving Show
+newtype API_KEY = API_KEY {getKey :: String} deriving Show
 
 data Coinbene = Coinbene
     { getManager :: Manager
