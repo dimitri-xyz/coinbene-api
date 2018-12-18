@@ -81,6 +81,11 @@ tests config = testGroup "\nAPI test cases"
         infos <- getOpenOrders coinbene (Proxy :: Proxy (Price BRL)) (Proxy :: Proxy (Vol BTC))
         assertBool (show infos) $ False
 
+  , testCase "live get balances" $ do
+        coinbene <- config
+        bals <- getBalances coinbene
+        assertBool (show bals) $ False
+
   ]
 
 ---------------------------------------

@@ -100,6 +100,7 @@ parseOpenOrdersPayload :: Object -> Parser OpenOrdersPayload
 parseOpenOrdersPayload h' = do
     orders' <- h' .: "orders"
     case orders' of
+        Null       -> return (OpenOrdersPayload [] 0 1 1)
         (Object h) -> 
             OpenOrdersPayload 
                 <$> do
@@ -109,4 +110,19 @@ parseOpenOrdersPayload h' = do
                 <*> h .: "pagesize"
                 <*> h .: "page"
 
-        _ -> fail "parseOpenOrdersPayload was unable to find an \"orders\" field in response" 
+        _ -> fail "parseOpenOrdersPayload was unable to find a matching \"orders\" field in response" 
+
+
+-----------------------------------------
+data BalancesPayload 
+  = BalancesPayload
+    { bAccount   :: String
+    , bBalances  :: [BalanceInfo]
+    }
+
+instance ParsePayload BalancesPayload where
+    parsePayload h = 
+        BalancesPayload
+            <$> h .: "account"
+            <*> h .: "balance"
+

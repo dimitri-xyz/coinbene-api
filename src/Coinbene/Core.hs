@@ -133,3 +133,22 @@ instance FromJSON OrderInfo where
                 return $ case (mAvePrice, mFees) of 
                     (Just avePrice, Just fees) -> Just (avePrice, fees)
                     _ -> Nothing
+
+
+-----------------------------------------
+data BalanceInfo =
+    BalanceInfo
+        { biAsset     :: String
+        , biAvailable :: Cost Scientific
+        , biReserved  :: Cost Scientific
+        , biTotal     :: Cost Scientific
+        }
+        deriving (Show)
+
+instance FromJSON BalanceInfo where
+    parseJSON = withObject "BalanceInfo" $ \v -> 
+        BalanceInfo
+            <$> v .: "asset"
+            <*> fmap (Cost . read) (v .: "available")
+            <*> fmap (Cost . read) (v .: "reserved")
+            <*> fmap (Cost . read) (v .: "total")

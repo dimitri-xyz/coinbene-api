@@ -46,6 +46,7 @@ class Exchange config m where
     getOpenOrders :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
     getOrderInfo  :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderInfo
     cancel        :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderID
+    getBalances   :: (HTTP m, MonadTime m) => config            -> m [BalanceInfo]
 
 newtype API_ID  = API_ID  {getID  :: String} deriving Show
 newtype API_KEY = API_KEY {getKey :: String} deriving Show
@@ -62,6 +63,7 @@ instance Exchange Coinbene IO where
     getOrderInfo   = getCoinbeneOrderInfo
     cancel         = cancelCoinbeneOrder
     getOpenOrders  = getOpenCoinbeneOrders
+    getBalances    = getCoinbeneBalances
 
 
 -----------------------------------------
@@ -191,3 +193,20 @@ getOpenCoinbeneOrders config pp vv = do
         $ coinbeneRequest
 
     params = [("symbol", marketName)]
+
+
+getCoinbeneBalances :: (HTTP m, MonadTime m) => Coinbene -> m [BalanceInfo]
+getCoinbeneBalances config = do
+    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
+    response <- http (traceShowId signedReq) (getManager config)
+    return $ bBalances $ decodeResponse "getCoinbeneBalances" $ traceShowId response
+
+  where
+    request
+        = setRequestMethod "POST"
+        $ setRequestPath "/v1/trade/balance"
+        $ setRequestHeaders [("Content-Type","application/json;charset=utf-8"),("Connection","keep-alive")]
+        $ coinbeneRequest
+
+    params = [("account"  , "exchange")]
+
