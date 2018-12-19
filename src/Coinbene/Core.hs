@@ -16,6 +16,7 @@ import Data.Scientific
 class (Generic coin, FromJSON coin) => Coin coin where
   coinSymbol :: Proxy coin -> String
   showBare   :: coin -> String
+  readBare   :: String -> coin
 
 -----------------------------------------
 -- Units
@@ -134,3 +135,28 @@ instance FromJSON BalanceInfo where
             <*> fmap (Cost . read) (v .: "available")
             <*> fmap (Cost . read) (v .: "reserved")
             <*> fmap (Cost . read) (v .: "total")
+
+-----------------------------------------
+data Trade p v =
+    Trade
+        { tTradeID :: Scientific
+        , tPrice   :: Price p
+        , tVol     :: Vol   v
+        , tTakerSide :: OrderSide
+        , tTime    :: MilliEpoch 
+        }
+        deriving Show
+
+instance (Coin p, Coin v) => FromJSON (Trade p v) where
+    parseJSON = withObject "Trade" $ \v -> 
+        Trade 
+            <$> fmap read (v .: "tradeId")
+            <*> fmap (Price . readBare) (v .: "price")
+            <*> fmap (Vol   . readBare) (v .: "quantity")
+            <*> do
+                    taker <- v .: "take"
+                    case taker of
+                        "buy"  -> pure Bid
+                        "sell" -> pure Ask
+                        _      -> fail ("parseJSON - Unknown taker side when parsing trade: " ++ taker)
+            <*> v .: "time"

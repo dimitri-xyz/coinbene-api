@@ -43,6 +43,7 @@ instance HTTP IO where
 class Exchange config m where
     placeLimit    :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> OrderSide -> Price p -> Vol v -> m OrderID
     getBook       :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> Proxy (Price p) -> Proxy (Vol v) -> m (QuoteBook p v)
+    getTrades     :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> Proxy (Price p) -> Proxy (Vol v) -> m [Trade p v]
     getOpenOrders :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
     getOrderInfo  :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderInfo
     cancel        :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderID
@@ -64,6 +65,7 @@ instance Exchange Coinbene IO where
     cancel         = cancelCoinbeneOrder
     getOpenOrders  = getOpenCoinbeneOrders
     getBalances    = getCoinbeneBalances
+    getTrades config = getCoinbeneTrades config 300
 
 
 -----------------------------------------
@@ -105,11 +107,11 @@ signRequest id key params request = do
 getCoinbeneBook :: forall m p v.
     ( HTTP m, Coin p, Coin v)
     => Coinbene -> Int -> Proxy (Price p) -> Proxy (Vol v) -> m (QuoteBook p v)
-getCoinbeneBook config depth p v = do
+getCoinbeneBook config depth pp vv = do
     response <- http request (getManager config)
     return $ bpOrderbook $ decodeResponse "getCoinbeneBook" $ traceShowId response
   where
-    marketName = marketSymbol p v
+    marketName = marketSymbol pp vv
     request
         = setRequestMethod "GET"
         $ setRequestPath "/v1/market/orderbook"
@@ -209,4 +211,25 @@ getCoinbeneBalances config = do
         $ coinbeneRequest
 
     params = [("account"  , "exchange")]
+
+
+getCoinbeneTrades :: forall m p v.
+    ( HTTP m, Coin p, Coin v)
+    => Coinbene -> Int -> Proxy (Price p) -> Proxy (Vol v) -> m [Trade p v]
+getCoinbeneTrades config num pp vv = do
+    response <- http request (getManager config)
+    return $ tTrades $ decodeResponse "getCoinbeneTrades" $ traceShowId response
+  where
+    marketName = marketSymbol pp vv
+    request
+        = setRequestMethod "GET"
+        $ setRequestPath "/v1/market/trades"
+        $ setRequestHeaders [("Content-Type","application/x-www-form-urlencoded;charset=utf-8"),("Connection","keep-alive")]
+        $ setRequestQueryString (fmap strToQuery query)
+        $ coinbeneRequest
+
+    query =
+        [ ("symbol", marketName)
+        , ("size", show num)
+        ]
 

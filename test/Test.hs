@@ -55,37 +55,41 @@ tests config = testGroup "\nAPI test cases"
         let mSampleError = decode encodedsampleRespError
         mSampleError @?= Just sampleRespError
 
-  , testCase "live BTCBRL orderbook parsing" $ do
+  , testCase "live - orderbook parsing" $ do
         coinbene <- config
         book <- getBook coinbene (Proxy :: Proxy (Price BRL)) (Proxy :: Proxy (Vol BTC))
         assertBool (show book) $ False
 
-  , testCase "live BTCBRL place limit" $ do
+  , testCase "live - place limit" $ do
         coinbene <- config
         oid <- placeLimit coinbene Ask (Price 9997999 :: Price BRL) (Vol 0.001 :: Vol BTC)
         assertBool (show oid) $ False
 
-  , testCase "live get order info" $ do
+  , testCase "live - get order info" $ do
         coinbene <- config
         info <- getOrderInfo coinbene (OrderID "201812150426145280027052")
         assertBool (show info) $ False
 
-  , testCase "live BTCBRL place and cancel order" $ do
+  , testCase "live - place and cancel order" $ do
         coinbene <- config
         oid  <- placeLimit coinbene Ask (Price 9999999 :: Price BRL) (Vol 0.001 :: Vol BTC)
         oid' <- cancel coinbene oid
         assertBool (show oid ++ ", " ++ show oid') $ False
 
-  , testCase "live get open orders" $ do
+  , testCase "live - get open orders" $ do
         coinbene <- config
         infos <- getOpenOrders coinbene (Proxy :: Proxy (Price BRL)) (Proxy :: Proxy (Vol BTC))
         assertBool (show infos) $ False
 
-  , testCase "live get balances" $ do
+  , testCase "live - get balances" $ do
         coinbene <- config
         bals <- getBalances coinbene
         assertBool (show bals) $ False
 
+  , testCase "live get trades" $ do
+        coinbene <- config
+        trades <- getTrades coinbene (Proxy :: Proxy (Price BRL)) (Proxy :: Proxy (Vol BTC))
+        assertBool (show trades) $ False
   ]
 
 ---------------------------------------

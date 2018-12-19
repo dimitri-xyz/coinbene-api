@@ -120,3 +120,25 @@ instance ParsePayload BalancesPayload where
             <$> h .: "account"
             <*> h .: "balance"
 
+-----------------------------------------
+data TradesPayload p v
+  = TradesPayload
+  { tTrades :: [Trade p v]
+  , tMarket :: String
+  }
+
+instance (Coin p, Coin v) => ParsePayload (TradesPayload p v) where
+    parsePayload = parseTradesPayload
+
+parseTradesPayload :: forall p v. (Coin p, Coin v) => Object -> Parser (TradesPayload p v)
+parseTradesPayload h = do
+    mTrades <- h .:? "trades"
+    mSymbol <- h .:? "symbol"
+    case (mTrades, mSymbol) of
+        (Just ts, Just s) -> let expectedMarket = marketSymbol  (Proxy :: Proxy (Price p)) (Proxy :: Proxy (Vol v))  
+                              in if s /= expectedMarket
+                                    then fail $ "parseTradesPayload obtained data for: `" ++ s ++ 
+                                                "` market, but asked for " ++ expectedMarket
+                                    else return (TradesPayload ts s)
+        _ -> fail "parseTradesPayload was unable to parse trades and symbol in response" 
+
