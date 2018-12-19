@@ -86,6 +86,22 @@ decodeResponse errFunctionName response = case eitherDecode' (responseBody respo
                         RespError desc time -> error (errFunctionName ++ ": " ++ desc ++ " - response: " ++ show response)
 
 
+signRequest :: MonadTime m => API_ID -> API_KEY -> [(String, String)] -> Request -> m Request
+signRequest id key params request = do
+    now <- fmap (MilliEpoch . truncate . (1000*) . realToFrac . utcTimeToPOSIXSeconds) currentTime
+    let signedParams = signParams id key now params
+    return $ setRequestBodyJSON (fromList signedParams) request
+  where
+    signParams :: API_ID -> API_KEY -> MilliEpoch -> [(String, String)] -> [(String, String)]
+    signParams id key now params =
+        let msg = ("apiid", getID id) : ("timestamp", showBareMilliEpoch now) : params
+            sig = md5 $ intercalate "&" $ sort $ fmap (fmap toUpper . pairUp) (("secret", getKey key) : msg)
+            pairUp (x,y) = x ++ "=" ++ y
+            md5 x = show (hashWith MD5 (pack x))
+         in ("sign", sig) : msg
+
+
+-----------------------------------------
 getCoinbeneBook :: forall m p v.
     ( HTTP m, Coin p, Coin v)
     => Coinbene -> Int -> Proxy (Price p) -> Proxy (Vol v) -> m (QuoteBook p v)
@@ -128,22 +144,6 @@ placeCoinbeneLimit config side p v = do
         , ("quantity", showBareVol   v)
         , ("type"    , case side of {Bid -> "buy-limit"; Ask -> "sell-limit"})
         ]
-
-
-signRequest :: MonadTime m => API_ID -> API_KEY -> [(String, String)] -> Request -> m Request
-signRequest id key params request = do
-    now <- fmap (MilliEpoch . truncate . (1000*) . realToFrac . utcTimeToPOSIXSeconds) currentTime
-    let signedParams = signParams id key now params
-    return $ setRequestBodyJSON (fromList signedParams) request
-  where
-    signParams :: API_ID -> API_KEY -> MilliEpoch -> [(String, String)] -> [(String, String)]
-    signParams id key now params =
-        let msg = ("apiid", getID id) : ("timestamp", showBareMilliEpoch now) : params
-            sig = md5 $ intercalate "&" $ sort $ fmap (fmap toUpper . pairUp) (("secret", getKey key) : msg)
-            pairUp (x,y) = x ++ "=" ++ y
-            md5 x = show (hashWith MD5 (pack x))
-         in ("sign", sig) : msg
-
 
 getCoinbeneOrderInfo :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderInfo
 getCoinbeneOrderInfo config (OrderID oid) = do
