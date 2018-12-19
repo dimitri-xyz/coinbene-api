@@ -17,13 +17,13 @@ import Network.HTTP.Client.TLS      (tlsManagerSettings)
 import Debug.Trace
 
 instance IsOption API_ID where
-    defaultValue = error "User must supply API ID for authenticated tests."
+    defaultValue = error "User must supply API ID (on command line or environment) for authenticated tests."
     parseValue = Just . API_ID
     optionName = return "API_ID"
     optionHelp = return "Customer's API ID for Coinbene account (hex encoded)."
 
 instance IsOption API_KEY where
-    defaultValue = error "User must supply API secret key for authenticated tests."
+    defaultValue = error "User must supply API secret key (on command line or environment) for authenticated tests."
     parseValue = Just . API_KEY
     optionName = return "API_KEY"
     optionHelp = return "Customer's API secret key for Coinbene account (hex encoded)."
@@ -58,38 +58,41 @@ tests config = testGroup "\nAPI test cases"
   , testCase "live - orderbook parsing" $ do
         coinbene <- config
         book <- getBook coinbene (Proxy :: Proxy (Price BRL)) (Proxy :: Proxy (Vol BTC))
-        assertBool (show book) $ False
+        assertBool (show book) $ qbAsks book /= [] && qbBids book /= []
 
   , testCase "live - place limit" $ do
         coinbene <- config
         oid <- placeLimit coinbene Ask (Price 9997999 :: Price BRL) (Vol 0.001 :: Vol BTC)
-        assertBool (show oid) $ False
+        assertBool (show oid) $ oid /= OrderID "2018" -- forces evaluation
 
-  , testCase "live - get order info" $ do
+  , testCase "live - place and get order info" $ do
         coinbene <- config
-        info <- getOrderInfo coinbene (OrderID "201812150426145280027052")
-        assertBool (show info) $ False
+        oid <- placeLimit coinbene Ask (Price 9997999 :: Price BRL) (Vol 0.001 :: Vol BTC)
+        info <- getOrderInfo coinbene oid
+        assertBool ("placed: " ++ show oid ++ "\n got: " ++ show info) $ oid == (orderID info) 
 
   , testCase "live - place and cancel order" $ do
         coinbene <- config
         oid  <- placeLimit coinbene Ask (Price 9999999 :: Price BRL) (Vol 0.001 :: Vol BTC)
         oid' <- cancel coinbene oid
-        assertBool (show oid ++ ", " ++ show oid') $ False
+        assertBool ("placed: " ++ show oid ++ " canceled: " ++ show oid') $ oid == oid'
 
-  , testCase "live - get open orders" $ do
+  , testCase "live - place order then get open orders" $ do
         coinbene <- config
+        oid <- placeLimit coinbene Ask (Price 9999999 :: Price BRL) (Vol 0.001 :: Vol BTC)
         infos <- getOpenOrders coinbene (Proxy :: Proxy (Price BRL)) (Proxy :: Proxy (Vol BTC))
-        assertBool (show infos) $ False
+        -- must force oid
+        assertBool ("Placed order " ++ show oid ++ " but received empty open order list: " ++ show infos) $ oid /= (OrderID "") && infos /= []
 
   , testCase "live - get balances" $ do
         coinbene <- config
         bals <- getBalances coinbene
-        assertBool (show bals) $ False
+        assertBool ("No non-zero balances found: " ++ show bals) $ any (>0) (map biTotal bals)
 
-  , testCase "live get trades" $ do
+  , testCase "live - get trades" $ do
         coinbene <- config
         trades <- getTrades coinbene (Proxy :: Proxy (Price BRL)) (Proxy :: Proxy (Vol BTC))
-        assertBool (show trades) $ False
+        assertBool ("Less than 3 trades found: " ++ show trades) $ length trades > 2 && tPrice (head trades) > 0
   ]
 
 ---------------------------------------

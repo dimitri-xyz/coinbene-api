@@ -43,8 +43,8 @@ showBareMilliEpoch :: MilliEpoch -> String
 showBareMilliEpoch (MilliEpoch w) = show w
 
 newtype OrderID  = OrderID String deriving (Show, Eq, Ord, Generic, FromJSON)
-data OrderSide   = Bid | Ask deriving Show
-data OrderStatus = Filled | Unfilled | PartiallyFilled | Canceled | PartiallyCanceled deriving Show
+data OrderSide   = Bid | Ask deriving (Show, Eq)
+data OrderStatus = Filled | Unfilled | PartiallyFilled | Canceled | PartiallyCanceled deriving (Show, Eq)
 
 data AskQuote p v
   = AskQ
@@ -86,7 +86,7 @@ data OrderInfo =
     , filledAmount :: Cost Scientific
     , mAvePriceAndFees :: Maybe (Price Scientific, Cost Scientific) -- (average price, fees), nothing means "don't know"
     }
-    deriving (Show)
+    deriving (Show, Eq)
 
 instance FromJSON OrderInfo where
     parseJSON = withObject "OrderInfo" $ \v -> 

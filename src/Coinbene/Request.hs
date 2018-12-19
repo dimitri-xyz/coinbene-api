@@ -31,8 +31,6 @@ import           Crypto.Hash
 import           Coinbene.Core
 import           Coinbene.Parse
 
-import Debug.Trace
-
 -----------------------------------------
 class Monad m => HTTP m where
     http :: Request -> Manager -> m (Response LBS.ByteString)
@@ -109,7 +107,7 @@ getCoinbeneBook :: forall m p v.
     => Coinbene -> Int -> Proxy (Price p) -> Proxy (Vol v) -> m (QuoteBook p v)
 getCoinbeneBook config depth pp vv = do
     response <- http request (getManager config)
-    return $ bpOrderbook $ decodeResponse "getCoinbeneBook" $ traceShowId response
+    return $ bpOrderbook $ decodeResponse "getCoinbeneBook" response
   where
     marketName = marketSymbol pp vv
     request
@@ -150,8 +148,8 @@ placeCoinbeneLimit config side p v = do
 getCoinbeneOrderInfo :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderInfo
 getCoinbeneOrderInfo config (OrderID oid) = do
     signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
-    response <- http (traceShowId signedReq) (getManager config)
-    return $ (\(OrderInfoPayload x) -> x) $ decodeResponse "getCoinbeneOrderInfo" $ traceShowId response
+    response <- http signedReq (getManager config)
+    return $ (\(OrderInfoPayload x) -> x) $ decodeResponse "getCoinbeneOrderInfo" response
 
   where
     request
@@ -166,8 +164,8 @@ getCoinbeneOrderInfo config (OrderID oid) = do
 cancelCoinbeneOrder :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderID
 cancelCoinbeneOrder config (OrderID oid) = do
     signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
-    response <- http (traceShowId signedReq) (getManager config)
-    return $ (\(OIDPayload x) -> x) $ decodeResponse "cancelCoinbeneOrder" $ traceShowId response
+    response <- http signedReq (getManager config)
+    return $ (\(OIDPayload x) -> x) $ decodeResponse "cancelCoinbeneOrder" response
 
   where
     request
@@ -183,8 +181,8 @@ getOpenCoinbeneOrders :: (HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
 getOpenCoinbeneOrders config pp vv = do
     signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
-    response <- http (traceShowId signedReq) (getManager config)
-    return $ ooOrders $ decodeResponse "getOpenCoinbeneOrders" $ traceShowId response
+    response <- http signedReq (getManager config)
+    return $ ooOrders $ decodeResponse "getOpenCoinbeneOrders" response
 
   where
     marketName = marketSymbol pp vv
@@ -200,8 +198,8 @@ getOpenCoinbeneOrders config pp vv = do
 getCoinbeneBalances :: (HTTP m, MonadTime m) => Coinbene -> m [BalanceInfo]
 getCoinbeneBalances config = do
     signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
-    response <- http (traceShowId signedReq) (getManager config)
-    return $ bBalances $ decodeResponse "getCoinbeneBalances" $ traceShowId response
+    response <- http signedReq (getManager config)
+    return $ bBalances $ decodeResponse "getCoinbeneBalances" response
 
   where
     request
@@ -218,7 +216,7 @@ getCoinbeneTrades :: forall m p v.
     => Coinbene -> Int -> Proxy (Price p) -> Proxy (Vol v) -> m [Trade p v]
 getCoinbeneTrades config num pp vv = do
     response <- http request (getManager config)
-    return $ tTrades $ decodeResponse "getCoinbeneTrades" $ traceShowId response
+    return $ tTrades $ decodeResponse "getCoinbeneTrades" response
   where
     marketName = marketSymbol pp vv
     request
