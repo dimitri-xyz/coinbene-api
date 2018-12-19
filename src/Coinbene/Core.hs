@@ -35,21 +35,13 @@ instance FromJSON a => FromJSON (Price a)
 instance FromJSON a => FromJSON (Vol   a)
 instance FromJSON a => FromJSON (Cost  a)
 
-instance ToJSON a => ToJSON (Price a)
-instance ToJSON a => ToJSON (Vol   a)
-instance ToJSON a => ToJSON (Cost  a)
-
 -----------------------------------------
-
-newtype MilliEpoch = MilliEpoch Word64 deriving (Show, Eq, Ord, Generic, Num, Real, Enum, Integral)
+newtype MilliEpoch = MilliEpoch Word64 deriving (Show, Eq, Ord, Generic, Num, Real, Enum, Integral, FromJSON)
 
 showBareMilliEpoch :: MilliEpoch -> String
 showBareMilliEpoch (MilliEpoch w) = show w
 
-instance FromJSON MilliEpoch
-instance ToJSON   MilliEpoch
-
-newtype OrderID  = OrderID String deriving (Show, Eq, Ord, Generic, FromJSON, ToJSON)
+newtype OrderID  = OrderID String deriving (Show, Eq, Ord, Generic, FromJSON)
 data OrderSide   = Bid | Ask deriving Show
 data OrderStatus = Filled | Unfilled | PartiallyFilled | Canceled | PartiallyCanceled deriving Show
 
@@ -71,16 +63,6 @@ data QuoteBook p v
     , qbBids::[BidQuote p v]
     } deriving (Show, Eq, Generic)
 
--- `writeQuoteOpts` removes field label name mangling
-writeQuoteOpts = defaultOptions {fieldLabelModifier = map toLower . drop 2}
-
-instance (ToJSON p, Generic p, ToJSON v, Generic v) => ToJSON (AskQuote p v) where
-    toJSON = genericToJSON writeQuoteOpts
-instance (ToJSON p, Generic p, ToJSON v, Generic v) => ToJSON (BidQuote p v) where
-    toJSON = genericToJSON writeQuoteOpts
-instance (ToJSON p, Generic p, ToJSON v, Generic v) => ToJSON (QuoteBook p v) where
-    toJSON = genericToJSON writeQuoteOpts
-
 instance (FromJSON p, Generic p, FromJSON v, Generic v) => FromJSON (AskQuote p v) where
     parseJSON = withObject "AskQuote" $ \v -> AskQ <$> v .: "price" <*> v .: "quantity"
 instance (FromJSON p, Generic p, FromJSON v, Generic v) => FromJSON (BidQuote p v) where
@@ -91,19 +73,19 @@ instance (FromJSON p, Generic p, FromJSON v, Generic v) => FromJSON (QuoteBook p
 -----------------------------------------
 data OrderInfo =
     LimitOrder
-        { market     :: String
-        , oSide      :: OrderSide
-        , limitPrice :: Price Scientific
-        , limitVol   :: Vol   Scientific
-        , orderID    :: OrderID
-        , created      :: MilliEpoch
-        , mModified    :: Maybe MilliEpoch
-        , status       :: OrderStatus
-        , filledVol    :: Vol  Scientific
-        , filledAmount :: Cost Scientific
-        , mAvePriceAndFees :: Maybe (Price Scientific, Cost Scientific) -- (average price, fees), nothing means "don't know"
-        }
-        deriving (Show)
+    { market     :: String
+    , oSide      :: OrderSide
+    , limitPrice :: Price Scientific
+    , limitVol   :: Vol   Scientific
+    , orderID    :: OrderID
+    , created      :: MilliEpoch
+    , mModified    :: Maybe MilliEpoch
+    , status       :: OrderStatus
+    , filledVol    :: Vol  Scientific
+    , filledAmount :: Cost Scientific
+    , mAvePriceAndFees :: Maybe (Price Scientific, Cost Scientific) -- (average price, fees), nothing means "don't know"
+    }
+    deriving (Show)
 
 instance FromJSON OrderInfo where
     parseJSON = withObject "OrderInfo" $ \v -> 

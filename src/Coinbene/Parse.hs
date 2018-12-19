@@ -47,6 +47,8 @@ newtype OIDPayload       = OIDPayload         OrderID deriving (Show, Eq, Generi
 newtype OrderInfoPayload = OrderInfoPayload OrderInfo deriving (Show, Generic)
 
 -----------------------------------------
+-- this is like FromJSON but `parsePayload` receives an Object not a Value
+-- allows parsing of unwrapped fields at the top-level JSON object
 class ParsePayload a where
     parsePayload :: Object -> Parser a
 
@@ -64,17 +66,10 @@ instance ParsePayload payload => FromJSON (Resp payload) where
 
 
 -----------------------------------------
-instance ( FromJSON p, FromJSON v, Generic p, Generic v, Coin p, Coin v) => ParsePayload (QuoteBookPayload p v) where
+instance (Coin p, Coin v) => ParsePayload (QuoteBookPayload p v) where
     parsePayload = parseQuoteBookPayload
 
-parseQuoteBookPayload :: forall p v.
-        ( FromJSON   p
-        , Generic    p
-        , Coin       p
-        , FromJSON   v
-        , Generic    v
-        , Coin       v
-        ) => Object -> Parser (QuoteBookPayload p v)
+parseQuoteBookPayload :: forall p v. (Coin p, Coin v) => Object -> Parser (QuoteBookPayload p v)
 parseQuoteBookPayload h = do
     mBook   <- h .:? "orderbook"
     mSymbol <- h .:? "symbol"
@@ -111,7 +106,6 @@ parseOpenOrdersPayload h' = do
                 <*> h .: "page"
 
         _ -> fail "parseOpenOrdersPayload was unable to find a matching \"orders\" field in response" 
-
 
 -----------------------------------------
 data BalancesPayload 
