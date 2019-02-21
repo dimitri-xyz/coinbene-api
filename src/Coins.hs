@@ -24,7 +24,7 @@ instance Coin BTC where
 
 instance Coin BRL where
   coinSymbol _     = "BRL"
-  showBare (BRL x) = formatScientific Fixed (Just 8) x -- arbitrary, could be just 2
+  showBare (BRL x) = formatScientific Fixed (Just 2) x
   readBare         = BRL . read
 
 instance Coin LTC where
@@ -39,5 +39,5 @@ instance Coin ETH where
 
 instance Coin USDT where
   coinSymbol _      = "USDT"
-  showBare (USDT x) = formatScientific Fixed (Just 8) x
+  showBare (USDT x) = formatScientific Fixed (Just 2) x
   readBare          = USDT . read
