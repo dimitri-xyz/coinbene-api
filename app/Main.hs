@@ -31,25 +31,25 @@ main = do
         book <- getBook coinbene (Proxy :: Proxy (Price USDT)) (Proxy :: Proxy (Vol BTC))
         putStr $ backtrackCursor $ showTopN lines book
         threadDelay 1500000
-  
+
     -- propagate exceptions to this thread
     link thread
-    
+
     -- run until users presses <ENTER> key
-    keyboardWait 
+    keyboardWait
 
     -- move screen cursor past last update
-    putStrLn $ take (2 * lines + 3) $ repeat '\n' 
+    putStrLn $ take (2 * lines + 3) $ repeat '\n'
 
 
 
 --------------------------------------------------------------------------------
 keyboardWait :: IO ()
-keyboardWait = getLine >> return () 
+keyboardWait = getLine >> return ()
 
 -- | Show top N bids and asks
 showTopN :: forall p v. (Coin p, Coin v, Show p, Show v) => Int -> QuoteBook p v -> String
-showTopN n book 
+showTopN n book
     =  coinSymbol (Proxy :: Proxy v) ++ coinSymbol (Proxy :: Proxy p) ++ " market:\n"
     ++ "--------------\n\n"
     ++ concatMap formatRow asks'

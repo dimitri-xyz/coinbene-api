@@ -31,7 +31,7 @@ instance IsOption API_KEY where
 
 main = defaultMainWithIngredients ings $
     askOption $ \apikey ->
-    askOption $ \apiid -> 
+    askOption $ \apiid ->
     withResource (mkConfig apiid apikey) (\_ -> return ()) tests
   where
     ings = includingOptions
@@ -39,7 +39,7 @@ main = defaultMainWithIngredients ings $
         , (Option (Proxy :: Proxy API_KEY))
         ] : defaultIngredients
 
-    mkConfig apiid apikey = do 
+    mkConfig apiid apikey = do
         manager <- newManager tlsManagerSettings
         return $ Coinbene manager apiid apikey
 
@@ -69,7 +69,7 @@ tests config = testGroup "\nAPI test cases"
         coinbene <- config
         oid <- placeLimit coinbene Ask (Price 9997999 :: Price BRL) (Vol 0.001 :: Vol BTC)
         info <- getOrderInfo coinbene oid
-        assertBool ("placed: " ++ show oid ++ "\n got: " ++ show info) $ oid == (orderID info) 
+        assertBool ("placed: " ++ show oid ++ "\n got: " ++ show info) $ oid == (orderID info)
 
   , testCase "live - place and cancel order" $ do
         coinbene <- config
@@ -98,15 +98,15 @@ tests config = testGroup "\nAPI test cases"
 ---------------------------------------
 -- Benchmark orderbook parsing test
 sampleResponse :: Resp (QuoteBookPayload BRL BTC)
-sampleResponse = RespOK 
-    { rPayload = BookPayload 
+sampleResponse = RespOK
+    { rPayload = BookPayload
       { bpOrderbook = QuoteBook
-          { qbBids = 
+          { qbBids =
               [ BidQ {bqPrice = Price 14770.00, bqQuantity = Vol 0.49930000}
               , BidQ {bqPrice = Price 14750.00, bqQuantity = Vol 0.03130000}
               , BidQ {bqPrice = Price 14553.16, bqQuantity = Vol 0.00020000}
               ]
-          , qbAsks = 
+          , qbAsks =
               [ AskQ {aqPrice = Price 15556.57, aqQuantity = Vol 0.00280000}
               , AskQ {aqPrice = Price 16550.00, aqQuantity = Vol 0.19210000}
               , AskQ {aqPrice = Price 24299.99, aqQuantity = Vol 0.02470000}
@@ -126,7 +126,7 @@ sampleRespError :: Resp (QuoteBookPayload BRL BTC)
 sampleRespError = RespError
     { rDescription = "some error"
     , rTimestamp   = 1234
-    } 
+    }
 
 encodedsampleRespError = "{\"description\":\"some error\",\"status\":\"error\",\"timestamp\":1234}"
 
@@ -138,8 +138,8 @@ sampleBid :: BidQuote BRL BTC
 sampleBid = BidQ { bqPrice =  5000, bqQuantity = 2}
 
 sampleBook :: QuoteBook BRL BTC
-sampleBook = QuoteBook 
+sampleBook = QuoteBook
     { qbAsks = [sampleAsk]
     , qbBids = [sampleBid,sampleBid]
-    } 
+    }
 

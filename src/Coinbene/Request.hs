@@ -80,7 +80,7 @@ coinbeneRequest
 -- FIX ME! should not use `error` here. This is not programmer error, but a possible run-time exception
 decodeResponse :: ParsePayload payload => String -> Response LBS.ByteString -> payload
 decodeResponse errFunctionName response = case eitherDecode' (responseBody response) of
-    Left errMsg -> error (errFunctionName ++ ": " ++ errMsg ++ " - response: " ++ show response) 
+    Left errMsg -> error (errFunctionName ++ ": " ++ errMsg ++ " - response: " ++ show response)
     Right resp  -> case resp of
                         RespOK payload time -> payload
                         RespError desc time -> error (errFunctionName ++ ": " ++ desc ++ " - response: " ++ show response)
@@ -126,7 +126,7 @@ placeCoinbeneLimit :: forall m p v.
     ( HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> OrderSide -> Price p -> Vol v -> m (OrderID)
 placeCoinbeneLimit config side p v = do
-    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
+    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) {- (traceShowId -} params {- ) -} request
     response <- http signedReq (getManager config)
     return $ (\(OIDPayload x) -> x) $ decodeResponse "placeCoinbeneLimit" response
 

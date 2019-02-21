@@ -89,12 +89,12 @@ data OrderInfo =
     deriving (Show, Eq)
 
 instance FromJSON OrderInfo where
-    parseJSON = withObject "OrderInfo" $ \v -> 
+    parseJSON = withObject "OrderInfo" $ \v ->
         LimitOrder
-            <$> v .: "symbol" 
+            <$> v .: "symbol"
             <*> do  oSide <- v .: "type"
                     return $ case (oSide :: String) of
-                        "buy-limit"  -> Bid 
+                        "buy-limit"  -> Bid
                         "sell-limit" -> Ask
             <*> fmap (Price . read) (v .: "price")
             <*> fmap (Vol   . read) (v .: "orderquantity")
@@ -113,7 +113,7 @@ instance FromJSON OrderInfo where
             <*> do
                 mAvePrice <- v .:? "averageprice"
                 mFees     <- v .:? "fees"
-                return $ case (mAvePrice, mFees) of 
+                return $ case (mAvePrice, mFees) of
                     (Just avePrice, Just fees) -> Just (avePrice, fees)
                     _ -> Nothing
 
@@ -129,7 +129,7 @@ data BalanceInfo =
         deriving (Show)
 
 instance FromJSON BalanceInfo where
-    parseJSON = withObject "BalanceInfo" $ \v -> 
+    parseJSON = withObject "BalanceInfo" $ \v ->
         BalanceInfo
             <$> v .: "asset"
             <*> fmap (Cost . read) (v .: "available")
@@ -143,13 +143,13 @@ data Trade p v =
         , tPrice   :: Price p
         , tVol     :: Vol   v
         , tTakerSide :: OrderSide
-        , tTime    :: MilliEpoch 
+        , tTime    :: MilliEpoch
         }
         deriving Show
 
 instance (Coin p, Coin v) => FromJSON (Trade p v) where
-    parseJSON = withObject "Trade" $ \v -> 
-        Trade 
+    parseJSON = withObject "Trade" $ \v ->
+        Trade
             <$> fmap read (v .: "tradeId")
             <*> fmap (Price . readBare) (v .: "price")
             <*> fmap (Vol   . readBare) (v .: "quantity")

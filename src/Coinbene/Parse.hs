@@ -10,7 +10,7 @@ import GHC.Generics
 import Data.Proxy
 import Data.Aeson
 import Data.Aeson.Types             (Object, Parser)
-import Data.Vector                  (toList) 
+import Data.Vector                  (toList)
 
 import Coinbene.Core
 
@@ -26,16 +26,16 @@ data Resp payload
   | RespError
     { rDescription :: String
     , rTimestamp :: MilliEpoch
-    } 
+    }
     deriving (Show, Eq, Generic)
 
-data QuoteBookPayload p v 
+data QuoteBookPayload p v
   = BookPayload
     { bpOrderbook :: QuoteBook p v
     , bpSymbol :: String
     } deriving (Show, Eq, Generic)
 
-data OpenOrdersPayload 
+data OpenOrdersPayload
   = OpenOrdersPayload
     { ooOrders   :: [OrderInfo]
     , ooCount    :: Int
@@ -74,12 +74,12 @@ parseQuoteBookPayload h = do
     mBook   <- h .:? "orderbook"
     mSymbol <- h .:? "symbol"
     case (mBook, mSymbol) of
-        (Just b, Just s) -> let expectedMarket = marketSymbol  (Proxy :: Proxy (Price p)) (Proxy :: Proxy (Vol v))  
+        (Just b, Just s) -> let expectedMarket = marketSymbol  (Proxy :: Proxy (Price p)) (Proxy :: Proxy (Vol v))
                              in if s == expectedMarket
                                     then return (BookPayload b s)
-                                    else fail $ "parseQuoteBookPayload obtained data for: `" ++ s ++ 
+                                    else fail $ "parseQuoteBookPayload obtained data for: `" ++ s ++
                                                 "` market, but asked for " ++ expectedMarket
-        _ -> fail "parseQuoteBookPayload was unable to parse orderbook and symbol in response" 
+        _ -> fail "parseQuoteBookPayload was unable to parse orderbook and symbol in response"
 
 instance ParsePayload OIDPayload where
     parsePayload h = fmap OIDPayload (h .: "orderid")
@@ -96,8 +96,8 @@ parseOpenOrdersPayload h' = do
     orders' <- h' .: "orders"
     case orders' of
         Null       -> return (OpenOrdersPayload [] 0 1 1)
-        (Object h) -> 
-            OpenOrdersPayload 
+        (Object h) ->
+            OpenOrdersPayload
                 <$> do
                     orders <- (h .: "result")
                     toList <$> withArray "OrderInfo" (mapM parseJSON) orders
@@ -105,17 +105,17 @@ parseOpenOrdersPayload h' = do
                 <*> h .: "pagesize"
                 <*> h .: "page"
 
-        _ -> fail "parseOpenOrdersPayload was unable to find a matching \"orders\" field in response" 
+        _ -> fail "parseOpenOrdersPayload was unable to find a matching \"orders\" field in response"
 
 -----------------------------------------
-data BalancesPayload 
+data BalancesPayload
   = BalancesPayload
     { bAccount   :: String
     , bBalances  :: [BalanceInfo]
     }
 
 instance ParsePayload BalancesPayload where
-    parsePayload h = 
+    parsePayload h =
         BalancesPayload
             <$> h .: "account"
             <*> h .: "balance"
@@ -135,10 +135,10 @@ parseTradesPayload h = do
     mTrades <- h .:? "trades"
     mSymbol <- h .:? "symbol"
     case (mTrades, mSymbol) of
-        (Just ts, Just s) -> let expectedMarket = marketSymbol  (Proxy :: Proxy (Price p)) (Proxy :: Proxy (Vol v))  
+        (Just ts, Just s) -> let expectedMarket = marketSymbol  (Proxy :: Proxy (Price p)) (Proxy :: Proxy (Vol v))
                               in if s /= expectedMarket
-                                    then fail $ "parseTradesPayload obtained data for: `" ++ s ++ 
+                                    then fail $ "parseTradesPayload obtained data for: `" ++ s ++
                                                 "` market, but asked for " ++ expectedMarket
                                     else return (TradesPayload ts s)
-        _ -> fail "parseTradesPayload was unable to parse trades and symbol in response" 
+        _ -> fail "parseTradesPayload was unable to parse trades and symbol in response"
 

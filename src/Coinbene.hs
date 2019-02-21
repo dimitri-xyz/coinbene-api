@@ -1,4 +1,4 @@
-module Coinbene 
+module Coinbene
     ( module Coinbene.Core
     , module Coins
     , module Coinbene.Request
