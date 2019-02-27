@@ -31,6 +31,7 @@ import           Crypto.Hash
 import           Coinbene.Core
 import           Coinbene.Parse
 
+import           Debug.Trace
 -----------------------------------------
 import           Debug.Trace
 data Verbosity = Silent | Normal | Verbose | Deafening deriving (Show, Eq, Ord)
