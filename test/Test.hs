@@ -41,7 +41,7 @@ main = defaultMainWithIngredients ings $
 
     mkConfig apiid apikey = do
         manager <- newManager tlsManagerSettings
-        return $ Coinbene manager apiid apikey
+        return $ Coinbene manager apiid apikey Silent
 
 
 ---------------------------------------

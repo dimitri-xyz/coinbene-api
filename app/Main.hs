@@ -23,7 +23,7 @@ main = do
     putStrLn "\n"
 
     manager  <- newManager tlsManagerSettings
-    let coinbene = Coinbene manager undefined undefined
+    let coinbene = Coinbene manager undefined undefined Silent
         lines    = 5
 
     -- start execution thread

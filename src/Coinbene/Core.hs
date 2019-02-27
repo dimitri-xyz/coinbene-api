@@ -13,7 +13,7 @@ import Data.Proxy
 import Data.Scientific
 
 -----------------------------------------
-class (Generic coin, FromJSON coin) => Coin coin where
+class (Generic coin, FromJSON coin, Show coin, Num coin) => Coin coin where
   coinSymbol :: Proxy coin -> String
   showBare   :: coin -> String
   readBare   :: String -> coin

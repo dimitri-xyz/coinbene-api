@@ -32,6 +32,10 @@ import           Coinbene.Core
 import           Coinbene.Parse
 
 -----------------------------------------
+import           Debug.Trace
+data Verbosity = Silent | Normal | Verbose | Deafening deriving (Show, Eq, Ord)
+
+-----------------------------------------
 class Monad m => HTTP m where
     http :: Request -> Manager -> m (Response LBS.ByteString)
 
@@ -54,6 +58,7 @@ data Coinbene = Coinbene
     { getManager :: Manager
     , getAPI_ID  :: API_ID
     , getAPI_KEY :: API_KEY
+    , verbosity  :: Verbosity
     }
 
 instance Exchange Coinbene IO where
@@ -102,12 +107,19 @@ signRequest id key params request = do
 
 
 -----------------------------------------
+-- FIX ME! "DRY" violations on the following API calls
+
 getCoinbeneBook :: forall m p v.
     ( HTTP m, Coin p, Coin v)
     => Coinbene -> Int -> Proxy (Price p) -> Proxy (Vol v) -> m (QuoteBook p v)
 getCoinbeneBook config depth pp vv = do
-    response <- http request (getManager config)
-    return $ bpOrderbook $ decodeResponse "getCoinbeneBook" response
+    response <- http
+                    (if verbosity config == Deafening then traceShowId request else request)
+                    (getManager config)
+    return
+        $ bpOrderbook
+        $ decodeResponse "getCoinbeneBook"
+            (if verbosity config == Deafening then traceShowId response else response)
   where
     marketName = marketSymbol pp vv
     request
@@ -126,9 +138,19 @@ placeCoinbeneLimit :: forall m p v.
     ( HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> OrderSide -> Price p -> Vol v -> m (OrderID)
 placeCoinbeneLimit config side p v = do
-    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) {- (traceShowId -} params {- ) -} request
-    response <- http signedReq (getManager config)
-    return $ (\(OIDPayload x) -> x) $ decodeResponse "placeCoinbeneLimit" response
+    signedReq <- signRequest
+                    (getAPI_ID config)
+                    (getAPI_KEY config)
+                    (if verbosity config == Verbose then trace ("/v1/trade/order/place " <> show params) params else params)
+                    request
+    response <- http
+                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (getManager config)
+    return
+        $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+        $ (\(OIDPayload x) -> x)
+        $ decodeResponse "placeCoinbeneLimit"
+                (if verbosity config == Deafening then traceShowId response else response)
 
   where
     marketName = marketSymbol (Proxy :: Proxy (Price p)) (Proxy :: Proxy (Vol v))
@@ -147,9 +169,19 @@ placeCoinbeneLimit config side p v = do
 
 getCoinbeneOrderInfo :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderInfo
 getCoinbeneOrderInfo config (OrderID oid) = do
-    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
-    response <- http signedReq (getManager config)
-    return $ (\(OrderInfoPayload x) -> x) $ decodeResponse "getCoinbeneOrderInfo" response
+    signedReq <- signRequest
+                    (getAPI_ID config)
+                    (getAPI_KEY config)
+                    (if verbosity config == Verbose then trace ("/v1/trade/order/info " <> show params) params else params)
+                    request
+    response <- http
+                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (getManager config)
+    return
+        $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+        $ (\(OrderInfoPayload x) -> x)
+        $ decodeResponse "getCoinbeneOrderInfo"
+                (if verbosity config == Deafening then traceShowId response else response)
 
   where
     request
@@ -163,9 +195,19 @@ getCoinbeneOrderInfo config (OrderID oid) = do
 
 cancelCoinbeneOrder :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderID
 cancelCoinbeneOrder config (OrderID oid) = do
-    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
-    response <- http signedReq (getManager config)
-    return $ (\(OIDPayload x) -> x) $ decodeResponse "cancelCoinbeneOrder" response
+    signedReq <- signRequest
+                    (getAPI_ID config)
+                    (getAPI_KEY config)
+                    (if verbosity config == Verbose then trace ("/v1/trade/order/cancel " <> show params) params else params)
+                    request
+    response <- http
+                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (getManager config)
+    return
+        $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+        $ (\(OIDPayload x) -> x)
+        $ decodeResponse "cancelCoinbeneOrder"
+            (if verbosity config == Deafening then traceShowId response else response)
 
   where
     request
@@ -180,9 +222,19 @@ cancelCoinbeneOrder config (OrderID oid) = do
 getOpenCoinbeneOrders :: (HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
 getOpenCoinbeneOrders config pp vv = do
-    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
-    response <- http signedReq (getManager config)
-    return $ ooOrders $ decodeResponse "getOpenCoinbeneOrders" response
+    signedReq <- signRequest
+                    (getAPI_ID config)
+                    (getAPI_KEY config)
+                    (if verbosity config == Verbose then trace ("/v1/trade/order/open-orders " <> show params) params else params)
+                    request
+    response <- http
+                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (getManager config)
+    return
+        $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+        $ ooOrders
+        $ decodeResponse "getOpenCoinbeneOrders"
+            (if verbosity config == Deafening then traceShowId response else response)
 
   where
     marketName = marketSymbol pp vv
@@ -197,9 +249,19 @@ getOpenCoinbeneOrders config pp vv = do
 
 getCoinbeneBalances :: (HTTP m, MonadTime m) => Coinbene -> m [BalanceInfo]
 getCoinbeneBalances config = do
-    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
-    response <- http signedReq (getManager config)
-    return $ bBalances $ decodeResponse "getCoinbeneBalances" response
+    signedReq <- signRequest
+                    (getAPI_ID config)
+                    (getAPI_KEY config)
+                    (if verbosity config == Verbose then trace ("/v1/trade/balance " <> show params) params else params)
+                    request
+    response <- http
+                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (getManager config)
+    return
+        $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+        $ bBalances
+        $ decodeResponse "getCoinbeneBalances"
+            (if verbosity config == Deafening then traceShowId response else response)
 
   where
     request
@@ -212,11 +274,17 @@ getCoinbeneBalances config = do
 
 
 getCoinbeneTrades :: forall m p v.
-    ( HTTP m, Coin p, Coin v)
+    (HTTP m, Coin p, Coin v)
     => Coinbene -> Int -> Proxy (Price p) -> Proxy (Vol v) -> m [Trade p v]
 getCoinbeneTrades config num pp vv = do
-    response <- http request (getManager config)
-    return $ tTrades $ decodeResponse "getCoinbeneTrades" response
+    response <- http
+                    (if verbosity config == Deafening then traceShowId request else request)
+                    (getManager config)
+    return
+        $ (\x -> if verbosity config == Deafening then traceShowId x else x)
+        $ tTrades
+        $ decodeResponse "getCoinbeneTrades"
+            (if verbosity config == Deafening then traceShowId response else response)
   where
     marketName = marketSymbol pp vv
     request
