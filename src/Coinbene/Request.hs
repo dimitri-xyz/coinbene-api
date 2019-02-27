@@ -31,6 +31,7 @@ import           Crypto.Hash
 import           Coinbene.Core
 import           Coinbene.Parse
 
+import           Debug.Trace
 -----------------------------------------
 class Monad m => HTTP m where
     http :: Request -> Manager -> m (Response LBS.ByteString)
@@ -126,7 +127,7 @@ placeCoinbeneLimit :: forall m p v.
     ( HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> OrderSide -> Price p -> Vol v -> m (OrderID)
 placeCoinbeneLimit config side p v = do
-    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) {- (traceShowId -} params {- ) -} request
+    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) (traceShowId params) request
     response <- http signedReq (getManager config)
     return $ (\(OIDPayload x) -> x) $ decodeResponse "placeCoinbeneLimit" response
 
@@ -163,7 +164,7 @@ getCoinbeneOrderInfo config (OrderID oid) = do
 
 cancelCoinbeneOrder :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderID
 cancelCoinbeneOrder config (OrderID oid) = do
-    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) params request
+    signedReq <- signRequest (getAPI_ID config) (getAPI_KEY config) (traceShowId params) request
     response <- http signedReq (getManager config)
     return $ (\(OIDPayload x) -> x) $ decodeResponse "cancelCoinbeneOrder" response
 
