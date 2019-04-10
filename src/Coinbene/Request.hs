@@ -23,6 +23,8 @@ import           Data.Char                          (toUpper, isDigit)
 import           Data.List                          (intercalate, sort, dropWhile)
 import           Data.Proxy                         (Proxy(..))
 
+import           Control.Exception                  (catch, throwIO, Exception)
+import           Control.Concurrent                 (threadDelay)
 import           Control.Monad.Time                 (MonadTime, currentTime)
 import           Data.Time.Clock.POSIX              (utcTimeToPOSIXSeconds)
 
@@ -36,12 +38,24 @@ import           Debug.Trace
 import           Debug.Trace
 data Verbosity = Silent | Normal | Verbose | Deafening deriving (Show, Eq, Ord)
 
+retryDelay = 5000000
 -----------------------------------------
 class Monad m => HTTP m where
     http :: Request -> Manager -> m (Response LBS.ByteString)
+    retry :: Verbosity -> Int -> m a -> m a
+    throwM :: Exception e => e -> m a
 
 instance HTTP IO where
     http = httpLbs
+    throwM = throwIO
+    retry verbosity delay action = action `catch`
+        (\(ex :: ExchangeError) -> do
+            if verbosity >= Verbose
+                then trace ("Caught ExchangeError. Retrying after " <> show delay <> " microseconds \n") $ return ()
+                else return ()
+            threadDelay delay
+            action -- retry
+        )
 
 class Exchange config m where
     placeLimit    :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> OrderSide -> Price p -> Vol v -> m OrderID
@@ -84,12 +98,12 @@ coinbeneRequest
 
 
 -- FIX ME! should not use `error` here. This is not programmer error, but a possible run-time exception
-decodeResponse :: ParsePayload payload => String -> Response LBS.ByteString -> payload
+decodeResponse :: ParsePayload payload => String -> Response LBS.ByteString -> Either ExchangeError payload
 decodeResponse errFunctionName response = case eitherDecode' (responseBody response) of
     Left errMsg -> error (errFunctionName ++ ": " ++ errMsg ++ " - response: " ++ show response)
     Right resp  -> case resp of
-                        RespOK payload time -> payload
-                        RespError desc time -> error (errFunctionName ++ ": " ++ desc ++ " - response: " ++ show response)
+                        RespOK payload time -> Right payload
+                        RespError desc time -> Left $ ExchangeError (errFunctionName ++ ": " ++ desc ++ " - response: " ++ show response)
 
 
 signRequest :: MonadTime m => API_ID -> API_KEY -> [(String, String)] -> Request -> m Request
@@ -113,14 +127,16 @@ signRequest id key params request = do
 getCoinbeneBook :: forall m p v.
     ( HTTP m, Coin p, Coin v)
     => Coinbene -> Int -> Proxy (Price p) -> Proxy (Vol v) -> m (QuoteBook p v)
-getCoinbeneBook config depth pp vv = do
+getCoinbeneBook config depth pp vv = retry (verbosity config) retryDelay $ do
     response <- http
                     (if verbosity config == Deafening then traceShowId request else request)
                     (getManager config)
-    return
-        $ bpOrderbook
-        $ decodeResponse "getCoinbeneBook"
-            (if verbosity config == Deafening then traceShowId response else response)
+
+    let result = decodeResponse "getCoinbeneBook" (if verbosity config == Deafening then traceShowId response else response)
+    case result of
+        Left exception -> throwM exception
+        Right payload  -> return (bpOrderbook payload)
+
   where
     marketName = marketSymbol pp vv
     request
@@ -138,7 +154,7 @@ getCoinbeneBook config depth pp vv = do
 placeCoinbeneLimit :: forall m p v.
     ( HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> OrderSide -> Price p -> Vol v -> m (OrderID)
-placeCoinbeneLimit config side p v = do
+placeCoinbeneLimit config side p v = retry (verbosity config) retryDelay $ do
     signedReq <- signRequest
                     (getAPI_ID config)
                     (getAPI_KEY config)
@@ -147,11 +163,13 @@ placeCoinbeneLimit config side p v = do
     response <- http
                     (if verbosity config == Deafening then traceShowId signedReq else signedReq)
                     (getManager config)
-    return
-        $ (\x -> if verbosity config == Verbose then traceShowId x else x)
-        $ (\(OIDPayload x) -> x)
-        $ decodeResponse "placeCoinbeneLimit"
-                (if verbosity config == Deafening then traceShowId response else response)
+
+    let result = decodeResponse "placeCoinbeneLimit" (if verbosity config == Deafening then traceShowId response else response)
+    case result of
+        Left exception -> throwM exception
+        Right payload  -> return
+                $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+                $ (\(OIDPayload x) -> x) payload
 
   where
     marketName = marketSymbol (Proxy :: Proxy (Price p)) (Proxy :: Proxy (Vol v))
@@ -169,7 +187,7 @@ placeCoinbeneLimit config side p v = do
         ]
 
 getCoinbeneOrderInfo :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderInfo
-getCoinbeneOrderInfo config (OrderID oid) = do
+getCoinbeneOrderInfo config (OrderID oid) = retry (verbosity config) retryDelay $ do
     signedReq <- signRequest
                     (getAPI_ID config)
                     (getAPI_KEY config)
@@ -178,11 +196,13 @@ getCoinbeneOrderInfo config (OrderID oid) = do
     response <- http
                     (if verbosity config == Deafening then traceShowId signedReq else signedReq)
                     (getManager config)
-    return
-        $ (\x -> if verbosity config == Verbose then traceShowId x else x)
-        $ (\(OrderInfoPayload x) -> x)
-        $ decodeResponse "getCoinbeneOrderInfo"
-                (if verbosity config == Deafening then traceShowId response else response)
+
+    let result = decodeResponse "getCoinbeneOrderInfo" (if verbosity config == Deafening then traceShowId response else response)
+    case result of
+        Left exception -> throwM exception
+        Right payload  -> return
+                $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+                $ (\(OrderInfoPayload x) -> x) payload
 
   where
     request
@@ -195,7 +215,7 @@ getCoinbeneOrderInfo config (OrderID oid) = do
 
 
 cancelCoinbeneOrder :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderID
-cancelCoinbeneOrder config (OrderID oid) = do
+cancelCoinbeneOrder config (OrderID oid) = retry (verbosity config) retryDelay $ do
     signedReq <- signRequest
                     (getAPI_ID config)
                     (getAPI_KEY config)
@@ -204,11 +224,13 @@ cancelCoinbeneOrder config (OrderID oid) = do
     response <- http
                     (if verbosity config == Deafening then traceShowId signedReq else signedReq)
                     (getManager config)
-    return
-        $ (\x -> if verbosity config == Verbose then traceShowId x else x)
-        $ (\(OIDPayload x) -> x)
-        $ decodeResponse "cancelCoinbeneOrder"
-            (if verbosity config == Deafening then traceShowId response else response)
+
+    let result = decodeResponse "cancelCoinbeneOrder" (if verbosity config == Deafening then traceShowId response else response)
+    case result of
+        Left exception -> throwM exception
+        Right payload  -> return
+                $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+                $ (\(OIDPayload x) -> x) payload
 
   where
     request
@@ -222,7 +244,7 @@ cancelCoinbeneOrder config (OrderID oid) = do
 
 getOpenCoinbeneOrders :: (HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
-getOpenCoinbeneOrders config pp vv = do
+getOpenCoinbeneOrders config pp vv = retry (verbosity config) retryDelay $ do
     signedReq <- signRequest
                     (getAPI_ID config)
                     (getAPI_KEY config)
@@ -231,11 +253,13 @@ getOpenCoinbeneOrders config pp vv = do
     response <- http
                     (if verbosity config == Deafening then traceShowId signedReq else signedReq)
                     (getManager config)
-    return
-        $ (\x -> if verbosity config == Verbose then traceShowId x else x)
-        $ ooOrders
-        $ decodeResponse "getOpenCoinbeneOrders"
-            (if verbosity config == Deafening then traceShowId response else response)
+
+    let result = decodeResponse "getOpenCoinbeneOrders" (if verbosity config == Deafening then traceShowId response else response)
+    case result of
+        Left exception -> throwM exception
+        Right payload  -> return
+                $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+                $ ooOrders payload
 
   where
     marketName = marketSymbol pp vv
@@ -249,7 +273,7 @@ getOpenCoinbeneOrders config pp vv = do
 
 
 getCoinbeneBalances :: (HTTP m, MonadTime m) => Coinbene -> m [BalanceInfo]
-getCoinbeneBalances config = do
+getCoinbeneBalances config = retry (verbosity config) retryDelay $ do
     signedReq <- signRequest
                     (getAPI_ID config)
                     (getAPI_KEY config)
@@ -258,11 +282,13 @@ getCoinbeneBalances config = do
     response <- http
                     (if verbosity config == Deafening then traceShowId signedReq else signedReq)
                     (getManager config)
-    return
-        $ (\x -> if verbosity config == Verbose then traceShowId x else x)
-        $ bBalances
-        $ decodeResponse "getCoinbeneBalances"
-            (if verbosity config == Deafening then traceShowId response else response)
+
+    let result = decodeResponse "getCoinbeneBalances" (if verbosity config == Deafening then traceShowId response else response)
+    case result of
+        Left exception -> throwM exception
+        Right payload  -> return
+                $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+                $ bBalances payload
 
   where
     request
@@ -277,15 +303,18 @@ getCoinbeneBalances config = do
 getCoinbeneTrades :: forall m p v.
     (HTTP m, Coin p, Coin v)
     => Coinbene -> Int -> Proxy (Price p) -> Proxy (Vol v) -> m [Trade p v]
-getCoinbeneTrades config num pp vv = do
+getCoinbeneTrades config num pp vv = retry (verbosity config) retryDelay $ do
     response <- http
                     (if verbosity config == Deafening then traceShowId request else request)
                     (getManager config)
-    return
-        $ (\x -> if verbosity config == Deafening then traceShowId x else x)
-        $ tTrades
-        $ decodeResponse "getCoinbeneTrades"
-            (if verbosity config == Deafening then traceShowId response else response)
+
+    let result = decodeResponse "getCoinbeneTrades" (if verbosity config == Deafening then traceShowId response else response)
+    case result of
+        Left exception -> throwM exception
+        Right payload  -> return
+                $ (\x -> if verbosity config == Deafening then traceShowId x else x)
+                $ tTrades payload
+
   where
     marketName = marketSymbol pp vv
     request

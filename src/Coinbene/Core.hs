@@ -12,6 +12,10 @@ import Data.Proxy
 
 import Data.Scientific
 
+import Control.Exception
+
+data ExchangeError = ExchangeError String deriving Show
+instance Exception ExchangeError
 -----------------------------------------
 class (Generic coin, FromJSON coin, Show coin, Num coin) => Coin coin where
   coinSymbol :: Proxy coin -> String
