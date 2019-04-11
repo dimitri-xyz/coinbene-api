@@ -65,7 +65,7 @@ instance HTTP IO where
 
 waitAndRetry :: Verbosity -> Int -> IO a -> IO a
 waitAndRetry verbosity delay action = do
-    if verbosity >= Verbose
+    if verbosity >= Normal
         then trace ("Caught Exception. Retrying after " <> show delay <> " microseconds \n") $ return ()
         else return ()
     threadDelay delay
