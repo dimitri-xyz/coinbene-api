@@ -14,8 +14,20 @@ import Data.Scientific
 
 import Control.Exception
 
-data ExchangeError = ExchangeError String deriving Show
+data ExchangeError
+    = ExchangeError     String
+    | JSONDecodingError String
+    deriving Show
+
 instance Exception ExchangeError
+
+data HTTPError
+    = HTTPStatus502     String
+    | HTTPStatusFailure String
+    deriving Show
+
+instance Exception HTTPError
+
 -----------------------------------------
 class (Generic coin, FromJSON coin, Show coin, Num coin) => Coin coin where
   coinSymbol :: Proxy coin -> String
