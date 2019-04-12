@@ -236,7 +236,7 @@ getCoinbeneOrderInfo config (OrderID oid) = retry True (verbosity config) retryD
 
 
 cancelCoinbeneOrder :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderID
-cancelCoinbeneOrder config (OrderID oid) = retry False (verbosity config) retryDelay $ do
+cancelCoinbeneOrder config (OrderID oid) = retry True (verbosity config) retryDelay $ do
     signedReq <- signRequest
                     (getAPI_ID config)
                     (getAPI_KEY config)
