@@ -52,25 +52,28 @@ instance HTTP IO where
 -----------------------------------------
 retry :: HTTP m => Bool -> Verbosity -> Int -> m a -> m a
 retry idempotent verbosity delay action = action `catches`
-    [ Handler (\(ex :: ExchangeError) -> waitAndRetry verbosity delay action)
+    [ Handler (\(ex :: ExchangeError) -> waitAndRetry                   verbosity delay action ex)
     , Handler (\(ex :: HttpException) -> handleHttpException idempotent verbosity delay action ex)
     ]
 
-waitAndRetry :: HTTP m => Verbosity -> Int -> m a -> m a
-waitAndRetry verbosity delay action = do
+waitAndRetry :: (HTTP m, Exception e) => Verbosity -> Int -> m a -> e -> m a
+waitAndRetry verbosity delay action ex = do
     if verbosity >= Normal
-        then trace ("Caught Exception. Retrying after " <> show delay <> " microseconds \n") $ return ()
+        then trace ("Caught Exception: " <> displayException ex <> "\n Retrying after " <> show delay <> " microseconds \n") $ return ()
         else return ()
     sleep delay
-    action -- the retry
+    a <- action -- the retry
+    if verbosity >= Normal
+        then trace ("Retry worked for: " <> displayException ex) $ return a
+        else return a
 
 handleHttpException :: HTTP m => Bool -> Verbosity -> Int -> m a -> HttpException -> m a
 handleHttpException idem verbosity delay action ex@(HttpExceptionRequest req (StatusCodeException resp _))
-    | responseStatus resp == badGateway502 = waitAndRetry verbosity delay action
+    | responseStatus resp == badGateway502 = waitAndRetry verbosity delay action ex
     | otherwise                            = throwM ex
 -- for other (network) errors, only retry on idempotent API calls
 handleHttpException idem verbosity delay action ex
-    | idem      = waitAndRetry verbosity delay action
+    | idem      = waitAndRetry verbosity delay action ex
     | otherwise = throwM ex
 -----------------------------------------
 
