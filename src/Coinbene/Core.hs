@@ -21,13 +21,6 @@ data ExchangeError
 
 instance Exception ExchangeError
 
-data HTTPError
-    = HTTPStatus502     String
-    | HTTPStatusFailure String
-    deriving Show
-
-instance Exception HTTPError
-
 -----------------------------------------
 class (Generic coin, FromJSON coin, Show coin, Num coin) => Coin coin where
   coinSymbol :: Proxy coin -> String
