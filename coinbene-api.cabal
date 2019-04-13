@@ -21,6 +21,10 @@ source-repository head
   type: git
   location: https://github.com/dimitri-xyz/coinbene-api
 
+Flag test-ethereum
+  Description:   Run tests on Ethereum rather than Bitcoin
+  Default:       False
+
 library
   exposed-modules:
       Coins
@@ -70,6 +74,10 @@ executable coinbene-api-exe
   default-language: Haskell2010
 
 test-suite coinbene-api-test
+
+  if flag(test-ethereum)
+    cpp-options: -DETHEREUM
+
   type: exitcode-stdio-1.0
   main-is: Test.hs
   other-modules:
