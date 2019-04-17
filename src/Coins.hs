@@ -34,7 +34,7 @@ instance Coin LTC where
 
 instance Coin ETH where
   coinSymbol _     = "ETH"
-  showBare (ETH x) = formatScientific Fixed (Just 2) x -- It seems to be what they adopted, though ETH has 18!
+  showBare (ETH x) = formatScientific Fixed (Just 2) x -- This is what was adopted for trading, though ETH has 18!
   readBare         = ETH . read
 
 instance Coin USDT where
