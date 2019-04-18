@@ -20,10 +20,9 @@ import           Data.HashMap.Strict                (fromList)
 
 import           Data.Maybe                         (fromMaybe)
 import           Data.Char                          (toUpper, isDigit)
-import           Data.List                          (intercalate, sort, dropWhile)
+import           Data.List                          (intercalate, sort, dropWhile, isPrefixOf)
 import           Data.Proxy                         (Proxy(..))
 
--- import           Control.Exception
 import           Control.Monad.Catch
 import           Control.Concurrent                 (threadDelay)
 import           Control.Monad.Time                 (MonadTime, currentTime)
@@ -35,6 +34,28 @@ import           Coinbene.Core
 import           Coinbene.Parse
 
 import           Debug.Trace
+
+{---------------------------------------
+
+    NOTE: Failed Cancellation Requests
+
+CoinBene's order cancellation API currently does not return any information about how much was
+still "not executed" when the cancellation request was made. It only fails the request, if the
+order was already *fully* executed or cancelled. This 1 extra bit of information is not very
+useful, so we ignore it.
+
+For example: consider a request to sell 100 Bitcoins. The request executes 1 Bitcoins and then
+we request a cancellation, thinking we will cancel it soon. But that does not happen and another
+98.99 Bitcoins are sold. And only when a total of 99.99 Bitcoins have been sold and there is
+only 0.01 Bitcoin left to sell, the order is canceled. The order cancellation API requests
+returns a success, but honestly, this is deceptive. In this case, it might as well have
+returned the failure.
+
+The fact is we don't know how much was still open at the time of cancellation. This information
+is not returned and this is a problem. We consider this type of cancellation failure a
+success meaning: "ok, request received, but it may be too late."
+
+-}
 
 -----------------------------------------
 data Verbosity = Silent | Normal | Verbose | Deafening deriving (Show, Eq, Ord)
@@ -232,8 +253,8 @@ getCoinbeneOrderInfo config (OrderID oid) = retry True (verbosity config) retryD
 
     params = [("orderid"  , oid)]
 
-
-cancelCoinbeneOrder :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderID
+-- See NOTE: Failed Cancellation Requests
+cancelCoinbeneOrder :: forall m. (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderID
 cancelCoinbeneOrder config (OrderID oid) = retry True (verbosity config) retryDelay $ do
     signedReq <- signRequest
                     (getAPI_ID config)
@@ -244,9 +265,9 @@ cancelCoinbeneOrder config (OrderID oid) = retry True (verbosity config) retryDe
                     (if verbosity config == Deafening then traceShowId signedReq else signedReq)
                     (getManager config)
 
-    let result = decodeResponse "cancelCoinbeneOrder" (if verbosity config == Deafening then traceShowId response else response)
+    let result = decodeResponse errFunctionName (if verbosity config == Deafening then traceShowId response else response)
     case result of
-        Left exception -> throwM exception
+        Left  err      -> acceptAttemptedRequest (verbosity config) errFunctionName (OrderID oid) err
         Right payload  -> return
                 $ (\x -> if verbosity config == Verbose then traceShowId x else x)
                 $ (\(OIDPayload x) -> x) payload
@@ -260,6 +281,18 @@ cancelCoinbeneOrder config (OrderID oid) = retry True (verbosity config) retryDe
 
     params = [("orderid"  , oid)]
 
+    errFunctionName = "cancelCoinbeneOrder"
+
+    -- a failed cancellation attempt because the order was already fully executed or canceled
+    -- is considered a successful request
+    acceptAttemptedRequest :: Verbosity -> String -> OrderID -> ExchangeError -> m OrderID
+    acceptAttemptedRequest verbosity fname oid err = case err of
+            ExchangeError msg ->
+                if (fname <> ": " <> "The transaction has been traded, failure") `isPrefixOf` msg ||
+                   (fname <> ": " <> "Invalid Order Status")                     `isPrefixOf` msg
+                    then return $ (\x -> if verbosity >= Normal then trace ("Request to cancel already executed order: " <> show x) x else x) oid
+                    else throwM err
+            _ ->         throwM err
 
 getOpenCoinbeneOrders :: (HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]

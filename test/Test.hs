@@ -88,6 +88,15 @@ tests config = testGroup ("\nAPI test cases for " <> MACRO_MARKET_NAME <> ". For
         oid' <- cancel coinbene oid
         assertBool ("placed: " ++ show oid ++ " canceled: " ++ show oid') $ oid == oid'
 
+  , testCase "DISABLED - live - try to cancel executed order" $ do
+        -- Careful! Adjust price before running
+        -- coinbene <- config
+        -- oida <- placeLimit coinbene Ask (Price 700 :: Price BRL) (Vol MACRO_TEST_VOL :: Vol MACRO_CURRENCY)
+        -- oidb <- placeLimit coinbene Bid (Price 700 :: Price BRL) (Vol MACRO_TEST_VOL :: Vol MACRO_CURRENCY)
+        -- oid' <- cancel coinbene oida
+        -- assertBool ("placed: " ++ show oida ++ " canceled: " ++ show oid') $ (oid' == oida)
+        return ()
+
   , testCase "live - place order then get open orders" $ do
         coinbene <- config
         oid <- placeLimit coinbene Ask (Price 9999999 :: Price BRL) (Vol MACRO_TEST_VOL :: Vol MACRO_CURRENCY)
