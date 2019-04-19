@@ -8,7 +8,7 @@ There a few different types of errors that we can get when calling the CoinBene 
 
 We will treat these errors as follows:
 
-Errors from (1) will be noticed when parsing the response and obtaining a `RespError` inside pure code in `decodeResponse` currently the returned `Left (ExchangeError ...)` always implies the operation failed. Accordingly, we always retry. The assumption is that no such API request will succeed or partially succeed. For now, this assumption holds.
+Errors from (1) will be noticed when parsing the response and obtaining a `RespError` inside pure code in `decodeResponse` currently the returned `Left (ExchangeError ...)` always implies the operation failed. Accordingly, we always retry. The assumption is that no such API request will succeed or partially succeed. For now, this assumption holds. There is one caveat to this, a failed request to cancel an order will return an `RespError` but we will simply return a success. Se NOTE "Failed Cancellation Requests" in Requests.hs for rationale.
 
 Errors from (2) will be automatically turned into exceptions by the library as we `setRequestCheckStatus` in the request. Each of these exceptions will be treated differently. It makes no sense to retry on a status code `tooManyRequests429`, but it makes total sense to retry upon a `badGateway502`. For now, all we do is to retry on a 502, other cases are not treated.
 
