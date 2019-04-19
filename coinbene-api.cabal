@@ -7,7 +7,7 @@ homepage:       https://github.com/dimitri-xyz/coinbene-api#readme
 bug-reports:    https://github.com/dimitri-xyz/coinbene-api/issues
 author:         Dimitri DeFigueiredo
 maintainer:     github@dimitri.xyz
-copyright:      2018 Coinbene Brasil
+copyright:      2019 CoinBene Americas
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
