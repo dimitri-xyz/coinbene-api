@@ -11,7 +11,7 @@ import           GHC.Generics
 import           Network.HTTP.Simple                        hiding (httpLbs, Proxy)
 import           Network.HTTP.Client                        hiding (Proxy)
 import           Network.HTTP.Client.TLS            (tlsManagerSettings)
-import           Network.HTTP.Types.Status          (statusCode, ok200, badGateway502)
+import           Network.HTTP.Types.Status          (statusCode, ok200, badGateway502, internalServerError500)
 
 import qualified Data.ByteString.Lazy.Char8 as LBS  (ByteString, pack, unpack)
 import           Data.ByteString.Char8              (ByteString, pack, unpack)
@@ -90,8 +90,9 @@ waitAndRetry verbosity delay action ex = do
 
 handleHttpException :: HTTP m => Bool -> Verbosity -> Int -> m a -> HttpException -> m a
 handleHttpException idem verbosity delay action ex@(HttpExceptionRequest req (StatusCodeException resp _))
-    | responseStatus resp == badGateway502 = waitAndRetry verbosity delay action ex
-    | otherwise                            = throwM ex
+    | responseStatus resp == badGateway502          = waitAndRetry verbosity delay action ex
+    | responseStatus resp == internalServerError500 = waitAndRetry verbosity delay action ex
+    | otherwise                                     = throwM ex
 -- for other (network) errors, only retry on idempotent API calls
 handleHttpException idem verbosity delay action ex
     | idem      = waitAndRetry verbosity delay action ex
