@@ -29,6 +29,7 @@ import           Control.Monad.Time                 (MonadTime, currentTime)
 import           Data.Time.Clock.POSIX              (utcTimeToPOSIXSeconds)
 
 import           Crypto.Hash
+import           Crypto.MAC.HMAC                    (HMAC, hmac, hmacGetDigest)
 
 import           Coinbene.Core
 import           Coinbene.Parse
@@ -97,7 +98,17 @@ handleHttpException idem verbosity delay action ex@(HttpExceptionRequest req (St
 handleHttpException idem verbosity delay action ex
     | idem      = waitAndRetry verbosity delay action ex
     | otherwise = throwM ex
+
 -----------------------------------------
+newtype API_ID  = API_ID  {getID  :: String} deriving Show
+newtype API_KEY = API_KEY {getKey :: String} deriving Show
+
+data Coinbene = Coinbene
+    { getManager :: Manager
+    , getAPI_ID  :: API_ID
+    , getAPI_KEY :: API_KEY
+    , verbosity  :: Verbosity
+    }
 
 class Exchange config m where
     placeLimit    :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> OrderSide -> Price p -> Vol v -> m OrderID
@@ -108,15 +119,6 @@ class Exchange config m where
     cancel        :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderID
     getBalances   :: (HTTP m, MonadTime m) => config            -> m [BalanceInfo]
 
-newtype API_ID  = API_ID  {getID  :: String} deriving Show
-newtype API_KEY = API_KEY {getKey :: String} deriving Show
-
-data Coinbene = Coinbene
-    { getManager :: Manager
-    , getAPI_ID  :: API_ID
-    , getAPI_KEY :: API_KEY
-    , verbosity  :: Verbosity
-    }
 
 instance Exchange Coinbene IO where
     placeLimit     = placeCoinbeneLimit
@@ -128,12 +130,33 @@ instance Exchange Coinbene IO where
     getTrades config = getCoinbeneTrades config 300
 
 
+newtype ReqID = ReqID String deriving (Eq, Show)
+
+class FuturesExchange config m where
+    placeOrder    :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> ReqID -> OrderSide -> Price p -> Vol v -> m OrderID
+    -- getOpenOrders :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
+    -- getOrderInfo  :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderInfo
+    cancelOrder   :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderID
+    getAccInfo    :: (HTTP m, MonadTime m) => config            -> m FuturesAccInfo
+
+instance FuturesExchange Coinbene IO where
+    getAccInfo     = getCoinbeneAccInfo
+    placeOrder     = undefined
+    cancelOrder    = undefined
+
 -----------------------------------------
 strToQuery :: (String, String) -> (ByteString, Maybe ByteString)
 strToQuery (x, y) = (pack x, Just $ pack y)
 
 coinbeneRequest
     = setRequestHost "api.coinbene.com"
+    $ setRequestSecure True
+    $ setRequestPort 443
+    $ setRequestCheckStatus -- force throwing `StatusCodeException` on non-2XX status codes
+    $ defaultRequest
+
+coinbeneFuturesReq
+    = setRequestHost "openapi-contract.coinbene.com"
     $ setRequestSecure True
     $ setRequestPort 443
     $ setRequestCheckStatus -- force throwing `StatusCodeException` on non-2XX status codes
@@ -147,8 +170,8 @@ decodeResponse errFunctionName response = case eitherDecode' (responseBody respo
                         RespError desc time -> Left $ ExchangeError (errFunctionName ++ ": " ++ desc ++ " - response: " ++ show response)
 
 
-signRequest :: MonadTime m => API_ID -> API_KEY -> [(String, String)] -> Request -> m Request
-signRequest id key params request = do
+signSpotRequest :: MonadTime m => API_ID -> API_KEY -> [(String, String)] -> Request -> m Request
+signSpotRequest id key params request = do
     now <- fmap (MilliEpoch . truncate . (1000*) . realToFrac . utcTimeToPOSIXSeconds) currentTime
     let signedParams = signParams id key now params
     return $ setRequestBodyJSON (fromList signedParams) request
@@ -161,6 +184,22 @@ signRequest id key params request = do
             md5 x = show (hashWith MD5 (pack x))
          in ("sign", sig) : msg
 
+-- FIX ME! CoinBene has changed the signature method for the Futures API. I am still figuring out how
+-- best to code the two options.
+signFuturesRequest :: MonadTime m => API_ID -> API_KEY -> [(String, String)] -> Request -> m Request
+signFuturesRequest id key params request = do
+    now <- fmap (MilliEpoch . truncate . (1000*) . realToFrac . utcTimeToPOSIXSeconds) currentTime
+    let signedParams = signParams id key now (unpack $ path request) params
+    return $ setRequestBodyJSON (fromList signedParams) request
+  where
+    signParams :: API_ID -> API_KEY -> MilliEpoch -> String -> [(String, String)] -> [(String, String)]
+    signParams id key now urlPath params =
+        let msg' = ("requestURI", urlPath) : ("apiid", getID id) : ("timestamp", showBareMilliEpoch now) : params
+            sig  = hmac (pack $ getKey key) (pack $ intercalate "&" $ sort $ fmap (fmap toUpper . pairUp) msg') :: HMAC SHA256
+            pairUp (x,y) = x ++ "=" ++ y
+            mac  = show (hmacGetDigest sig)
+
+         in ("sign", mac) : tail msg'
 
 -----------------------------------------
 -- FIX ME! "DRY" violations on the following API calls
@@ -196,7 +235,7 @@ placeCoinbeneLimit :: forall m p v.
     ( HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> OrderSide -> Price p -> Vol v -> m (OrderID)
 placeCoinbeneLimit config side p v = retry False (verbosity config) retryDelay $ do
-    signedReq <- signRequest
+    signedReq <- signSpotRequest
                     (getAPI_ID config)
                     (getAPI_KEY config)
                     (if verbosity config == Verbose then trace ("/v1/trade/order/place " <> show params) params else params)
@@ -229,7 +268,7 @@ placeCoinbeneLimit config side p v = retry False (verbosity config) retryDelay $
 
 getCoinbeneOrderInfo :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderInfo
 getCoinbeneOrderInfo config (OrderID oid) = retry True (verbosity config) retryDelay $ do
-    signedReq <- signRequest
+    signedReq <- signSpotRequest
                     (getAPI_ID config)
                     (getAPI_KEY config)
                     (if verbosity config == Verbose then trace ("/v1/trade/order/info " <> show params) params else params)
@@ -257,7 +296,7 @@ getCoinbeneOrderInfo config (OrderID oid) = retry True (verbosity config) retryD
 -- See NOTE: Failed Cancellation Requests
 cancelCoinbeneOrder :: forall m. (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderID
 cancelCoinbeneOrder config (OrderID oid) = retry True (verbosity config) retryDelay $ do
-    signedReq <- signRequest
+    signedReq <- signSpotRequest
                     (getAPI_ID config)
                     (getAPI_KEY config)
                     (if verbosity config == Verbose then trace ("/v1/trade/order/cancel " <> show params) params else params)
@@ -298,7 +337,7 @@ cancelCoinbeneOrder config (OrderID oid) = retry True (verbosity config) retryDe
 getOpenCoinbeneOrders :: (HTTP m, MonadTime m, Coin p, Coin v)
     => Coinbene -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
 getOpenCoinbeneOrders config pp vv = retry True (verbosity config) retryDelay $ do
-    signedReq <- signRequest
+    signedReq <- signSpotRequest
                     (getAPI_ID config)
                     (getAPI_KEY config)
                     (if verbosity config == Verbose then trace ("/v1/trade/order/open-orders " <> show params) params else params)
@@ -327,7 +366,7 @@ getOpenCoinbeneOrders config pp vv = retry True (verbosity config) retryDelay $ 
 
 getCoinbeneBalances :: (HTTP m, MonadTime m) => Coinbene -> m [BalanceInfo]
 getCoinbeneBalances config = retry True (verbosity config) retryDelay $ do
-    signedReq <- signRequest
+    signedReq <- signSpotRequest
                     (getAPI_ID config)
                     (getAPI_KEY config)
                     (if verbosity config == Verbose then trace ("/v1/trade/balance " <> show params) params else params)
@@ -381,4 +420,34 @@ getCoinbeneTrades config num pp vv = retry True (verbosity config) retryDelay $ 
         [ ("symbol", marketName)
         , ("size", show num)
         ]
+
+
+----------------------------------------
+getCoinbeneAccInfo :: (HTTP m, MonadTime m) => Coinbene -> m FuturesAccInfo
+getCoinbeneAccInfo config = retry True (verbosity config) retryDelay $ do
+    signedReq <- signFuturesRequest
+                    (getAPI_ID config)
+                    (getAPI_KEY config)
+                    (if verbosity config == Verbose then trace "/api/swap/v1/account/info" params else params)
+                    request
+    response <- http
+                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (getManager config)
+
+    error (show response)
+    -- let result = decodeResponse "getCoinbeneAccInfo" (if verbosity config == Deafening then traceShowId response else response)
+    -- case result of
+    --     Left exception -> throwM exception
+    --     Right payload  -> return
+    --             $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+    --             $ bBalances payload
+
+  where
+    request
+        = setRequestMethod "POST"
+        $ setRequestPath "/api/swap/v1/account/info"
+        $ setRequestHeaders [("Content-Type","application/json;charset=utf-8"),("Connection","keep-alive")]
+        $ coinbeneFuturesReq
+
+    params = []
 

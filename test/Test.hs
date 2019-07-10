@@ -113,6 +113,12 @@ tests config = testGroup ("\nAPI test cases for " <> MACRO_MARKET_NAME <> ". For
         coinbene <- config
         trades <- getTrades coinbene (Proxy :: Proxy (Price BRL)) (Proxy :: Proxy (Vol MACRO_CURRENCY))
         assertBool ("Less than 3 trades found: " ++ show trades) $ length trades > 2 && tPrice (head trades) > 0
+
+  , testCase "live - get futures account info" $ do
+        coinbene <- config
+        accInfo <- getAccInfo coinbene
+        assertBool ("Zero total balance found: " ++ show accInfo) $ totalBal accInfo > 0
+
   ]
 
 ---------------------------------------

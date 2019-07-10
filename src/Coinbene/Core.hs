@@ -169,3 +169,13 @@ instance (Coin p, Coin v) => FromJSON (Trade p v) where
                         "sell" -> pure Ask
                         _      -> fail ("parseJSON - Unknown taker side when parsing trade: " ++ taker)
             <*> v .: "time"
+
+data FuturesAccInfo =
+    FuturesAccInfo
+    { availBal   :: Cost Scientific
+    , frozenBal  :: Cost Scientific
+    , marginBal  :: Cost Scientific
+    , marginRate ::      Scientific
+    , totalBal   :: Cost Scientific
+    , unrealPNL  :: Cost Scientific
+    } deriving (Show, Eq)
