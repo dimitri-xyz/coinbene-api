@@ -8,6 +8,7 @@ module Coinbene.Parse where
 
 import GHC.Generics
 import Data.Proxy
+import Data.Char                    (toLower)
 import Data.Aeson
 import Data.Aeson.Types             (Object, Parser)
 import Data.Vector                  (toList)
@@ -142,3 +143,15 @@ parseTradesPayload h = do
                                     else return (TradesPayload ts s)
         _ -> fail "parseTradesPayload was unable to parse trades and symbol in response"
 
+
+-----------------------------------------
+data FuturesResp payload
+  = FuturesResp
+    { rCode    :: Int
+    , rMessage :: Maybe String
+    , rData    :: Maybe payload
+    }
+    deriving (Show, Eq, Generic)
+
+instance FromJSON payload => FromJSON (FuturesResp payload) where
+    parseJSON = genericParseJSON defaultOptions{ fieldLabelModifier = map toLower . drop 1 }

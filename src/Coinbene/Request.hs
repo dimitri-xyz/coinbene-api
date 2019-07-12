@@ -140,7 +140,7 @@ class FuturesExchange config m where
     getAccInfo    :: (HTTP m, MonadTime m) => config            -> m FuturesAccInfo
 
 instance FuturesExchange Coinbene IO where
-    getAccInfo     = getCoinbeneAccInfo
+    getAccInfo     = getCoinbeneFuturesAccInfo
     placeOrder     = undefined
     cancelOrder    = undefined
 
@@ -169,6 +169,12 @@ decodeResponse errFunctionName response = case eitherDecode' (responseBody respo
                         RespOK payload time -> Right payload
                         RespError desc time -> Left $ ExchangeError (errFunctionName ++ ": " ++ desc ++ " - response: " ++ show response)
 
+decodeFuturesResponse :: FromJSON payload => String -> Response LBS.ByteString -> Either ExchangeError payload
+decodeFuturesResponse errFunctionName response = case eitherDecode' (responseBody response) of
+    Left errMsg -> Left $ JSONDecodingError (errFunctionName ++ ": " ++ errMsg ++ " - response: " ++ show response)
+    Right resp  -> case resp of
+                        FuturesResp code message Nothing        -> Left $ ExchangeError (errFunctionName ++ " - missing data - response: " ++ show response)
+                        FuturesResp code message (Just payload) -> Right payload
 
 signSpotRequest :: MonadTime m => API_ID -> API_KEY -> [(String, String)] -> Request -> m Request
 signSpotRequest id key params request = do
@@ -423,8 +429,8 @@ getCoinbeneTrades config num pp vv = retry True (verbosity config) retryDelay $ 
 
 
 ----------------------------------------
-getCoinbeneAccInfo :: (HTTP m, MonadTime m) => Coinbene -> m FuturesAccInfo
-getCoinbeneAccInfo config = retry True (verbosity config) retryDelay $ do
+getCoinbeneFuturesAccInfo :: (HTTP m, MonadTime m) => Coinbene -> m FuturesAccInfo
+getCoinbeneFuturesAccInfo config = retry True (verbosity config) retryDelay $ do
     signedReq <- signFuturesRequest
                     (getAPI_ID config)
                     (getAPI_KEY config)
@@ -434,13 +440,13 @@ getCoinbeneAccInfo config = retry True (verbosity config) retryDelay $ do
                     (if verbosity config == Deafening then traceShowId signedReq else signedReq)
                     (getManager config)
 
-    error (show response)
-    -- let result = decodeResponse "getCoinbeneAccInfo" (if verbosity config == Deafening then traceShowId response else response)
-    -- case result of
-    --     Left exception -> throwM exception
-    --     Right payload  -> return
-    --             $ (\x -> if verbosity config == Verbose then traceShowId x else x)
-    --             $ bBalances payload
+    let result = decodeFuturesResponse "getCoinbeneFuturesAccInfo"
+                    (if verbosity config == Deafening then traceShowId response else response)
+    case result of
+        Left exception -> throwM exception
+        Right payload  -> return
+                $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+                $ payload
 
   where
     request

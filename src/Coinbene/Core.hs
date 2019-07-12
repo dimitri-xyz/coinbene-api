@@ -170,6 +170,7 @@ instance (Coin p, Coin v) => FromJSON (Trade p v) where
                         _      -> fail ("parseJSON - Unknown taker side when parsing trade: " ++ taker)
             <*> v .: "time"
 
+-----------------------------------------
 data FuturesAccInfo =
     FuturesAccInfo
     { availBal   :: Cost Scientific
@@ -179,3 +180,14 @@ data FuturesAccInfo =
     , totalBal   :: Cost Scientific
     , unrealPNL  :: Cost Scientific
     } deriving (Show, Eq)
+
+instance FromJSON FuturesAccInfo where
+    parseJSON = withObject "FuturesAccInfo" $ \v ->
+        FuturesAccInfo
+            <$> fmap (Cost . read) (v .: "availableBalance")
+            <*> fmap (Cost . read) (v .: "frozenBalance"   )
+            <*> fmap (Cost . read) (v .: "marginBalance"   )
+            <*> fmap (       read) (v .: "marginRate"      )
+            <*> fmap (Cost . read) (v .: "totalBalance"    )
+            <*> fmap (Cost . read) (v .: "unrealisedPnl"   )
+-----------------------------------------

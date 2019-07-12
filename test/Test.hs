@@ -119,6 +119,10 @@ tests config = testGroup ("\nAPI test cases for " <> MACRO_MARKET_NAME <> ". For
         accInfo <- getAccInfo coinbene
         assertBool ("Zero total balance found: " ++ show accInfo) $ totalBal accInfo > 0
 
+  , testCase "benchmark futures account parsing" $ do
+        let eFuturesAccResponse = eitherDecode' encodedFuturesAccountInfoResponse :: Either String (FuturesResp FuturesAccInfo)
+        eFuturesAccResponse @?= Right sampleFuturesAccountInfoResponse
+
   ]
 
 ---------------------------------------
@@ -169,3 +173,23 @@ sampleBook = QuoteBook
     , qbBids = [sampleBid,sampleBid]
     }
 
+
+---------------
+encodedFuturesAccountInfoResponse = "{\"code\":200,\"message\":\"\",\"data\":{\"availableBalance\":\"0.0789\","
+    <> "\"frozenBalance\":\"0.0000\",\"marginBalance\":\"0.0790\",\"marginRate\":\"0.0005\","
+    <> "\"totalBalance\":\"0.0789\",\"unrealisedPnl\":\"0.0000\"},\"timestamp\":1562800020291}"
+
+sampleFuturesAccountInfoResponse =
+    FuturesResp
+    { rCode     = 200
+    , rMessage  = Just ""
+    , rData     = Just $
+        FuturesAccInfo
+        { availBal   = Cost 0.0789
+        , frozenBal  = Cost 0.0
+        , marginBal  = Cost 0.0790
+        , marginRate =      0.0005
+        , totalBal   = Cost 0.0789
+        , unrealPNL  = Cost 0.0
+        }
+    }
