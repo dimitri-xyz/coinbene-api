@@ -188,6 +188,6 @@ instance FromJSON FuturesAccInfo where
             <*> fmap (Cost . read) (v .: "frozenBalance"   )
             <*> fmap (Cost . read) (v .: "marginBalance"   )
             <*> fmap (       read) (v .: "marginRate"      )
-            <*> fmap (Cost . read) (v .: "totalBalance"    )
+            <*> fmap (Cost . read) (v .: "balance"         )
             <*> fmap (Cost . read) (v .: "unrealisedPnl"   )
 -----------------------------------------

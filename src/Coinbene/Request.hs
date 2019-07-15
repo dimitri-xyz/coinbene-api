@@ -11,10 +11,11 @@ import           GHC.Generics
 import           Network.HTTP.Simple                        hiding (httpLbs, Proxy)
 import           Network.HTTP.Client                        hiding (Proxy)
 import           Network.HTTP.Client.TLS            (tlsManagerSettings)
-import           Network.HTTP.Types.Status          (statusCode, ok200, badGateway502, internalServerError500)
+import           Network.HTTP.Types                 (statusCode, ok200, badGateway502, internalServerError500, methodGet, methodPost)
 
 import qualified Data.ByteString.Lazy.Char8 as LBS  (ByteString, pack, unpack)
 import           Data.ByteString.Char8              (ByteString, pack, unpack)
+import           Data.ByteString.Lazy               (toStrict, fromStrict)
 import           Data.Aeson
 import           Data.HashMap.Strict                (fromList)
 
@@ -27,8 +28,10 @@ import           Control.Monad.Catch
 import           Control.Concurrent                 (threadDelay)
 import           Control.Monad.Time                 (MonadTime, currentTime)
 import           Data.Time.Clock.POSIX              (utcTimeToPOSIXSeconds)
+import           Data.Time.Clock                    (UTCTime(..))
+import           Data.Time.ISO8601                  (formatISO8601Millis)
 
-import           Crypto.Hash
+import           Crypto.Hash                        (SHA256, hashWith, MD5(..))
 import           Crypto.MAC.HMAC                    (HMAC, hmac, hmacGetDigest)
 
 import           Coinbene.Core
@@ -133,7 +136,7 @@ instance Exchange Coinbene IO where
 newtype ReqID = ReqID String deriving (Eq, Show)
 
 class FuturesExchange config m where
-    placeOrder    :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> ReqID -> OrderSide -> Price p -> Vol v -> m OrderID
+    placeOrder    :: (HTTP m, MonadTime m, Coin p, Coin market) => config -> Proxy market -> ReqID -> OrderSide -> Price p -> Vol p -> m OrderID
     -- getOpenOrders :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
     -- getOrderInfo  :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderInfo
     cancelOrder   :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderID
@@ -141,7 +144,7 @@ class FuturesExchange config m where
 
 instance FuturesExchange Coinbene IO where
     getAccInfo     = getCoinbeneFuturesAccInfo
-    placeOrder     = undefined
+    placeOrder     = placeCoinbeneFuturesLimit
     cancelOrder    = undefined
 
 -----------------------------------------
@@ -206,6 +209,29 @@ signFuturesRequest id key params request = do
             mac  = show (hmacGetDigest sig)
 
          in ("sign", mac) : tail msg'
+
+signFuturesRequestV2 :: MonadTime m => API_ID -> API_KEY -> Verbosity -> Request -> m Request
+signFuturesRequestV2 apiId key verbosity request = do
+    now <- currentTime
+    let timeStr = pack (formatISO8601Millis now)
+        mac = calculateMAC apiId key timeStr request
+    return
+        $ addRequestHeader "ACCESS-KEY"       (pack $ getID apiId)
+        $ addRequestHeader "ACCESS-TIMESTAMP" timeStr
+        $ addRequestHeader "ACCESS-SIGN"      mac
+        $ request
+  where
+    calculateMAC :: API_ID -> API_KEY -> ByteString -> Request -> ByteString
+    calculateMAC apiId key timeStr req
+        | methodGet  == method req, mempty == getBody req               = pack $ show $ hmacGetDigest $ (hmac (pack $ getKey key) ( (if verbosity >= Verbose then traceShowId else id) $ timeStr <>  "GET" <> path req <>        queryString req) :: HMAC SHA256)
+        | methodPost == method req, mempty == getRequestQueryString req = pack $ show $ hmacGetDigest $ (hmac (pack $ getKey key) ( (if verbosity >= Verbose then traceShowId else id) $ timeStr <> "POST" <> path req <> toStrict (getBody req)) :: HMAC SHA256)
+        | otherwise = error $ "calculateMAC - An HTTP Request to be authenticated can either have query string (if GET) or a request body (if POST), no other cases are allowed: " <> show req
+
+    getBody :: Request -> LBS.ByteString
+    getBody req
+        | RequestBodyLBS lbs <- requestBody req = lbs
+        | RequestBodyBS   bs <- requestBody req = fromStrict bs
+        | otherwise                             = error $ "Cannot read RequestBody in HTTP request (chunked?): " <> show req
 
 -----------------------------------------
 -- FIX ME! "DRY" violations on the following API calls
@@ -427,15 +453,14 @@ getCoinbeneTrades config num pp vv = retry True (verbosity config) retryDelay $ 
         , ("size", show num)
         ]
 
-
 ----------------------------------------
 getCoinbeneFuturesAccInfo :: (HTTP m, MonadTime m) => Coinbene -> m FuturesAccInfo
 getCoinbeneFuturesAccInfo config = retry True (verbosity config) retryDelay $ do
-    signedReq <- signFuturesRequest
-                    (getAPI_ID config)
+    signedReq <- signFuturesRequestV2
+                    (getAPI_ID  config)
                     (getAPI_KEY config)
-                    (if verbosity config == Verbose then trace "/api/swap/v1/account/info" params else params)
-                    request
+                    (verbosity config)
+                    (if verbosity config == Verbose then trace path request else request)
     response <- http
                     (if verbosity config == Deafening then traceShowId signedReq else signedReq)
                     (getManager config)
@@ -449,11 +474,77 @@ getCoinbeneFuturesAccInfo config = retry True (verbosity config) retryDelay $ do
                 $ payload
 
   where
+    path = "/api/swap/v2/account/info"
     request
-        = setRequestMethod "POST"
-        $ setRequestPath "/api/swap/v1/account/info"
+        = setRequestMethod "GET"
+        $ setRequestPath (pack path)
         $ setRequestHeaders [("Content-Type","application/json;charset=utf-8"),("Connection","keep-alive")]
         $ coinbeneFuturesReq
 
-    params = []
+----------------------------------------
+placeCoinbeneFuturesLimit ::
+    forall m p v market. (HTTP m, MonadTime m, Coin p, Coin market)
+    => Coinbene -> Proxy market -> ReqID -> OrderSide -> Price p -> Vol p -> m OrderID
+placeCoinbeneFuturesLimit config market (ReqID reqId) side p v = retry False (verbosity config) retryDelay $ do
+    signedReq <- signFuturesRequestV2
+                    (getAPI_ID config)
+                    (getAPI_KEY config)
+                    (verbosity config)
+                    (if verbosity config == Verbose then trace (path <> " " <> show body) request else request)
+    response <- http
+                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (getManager config)
+
+    error (show response)
+    -- let result = decodeFuturesResponse "placeCoinbeneFuturesLimit"
+    --                 (if verbosity config == Deafening then traceShowId response else response)
+    -- case result of
+    --     Left exception -> throwM exception
+    --     Right payload  -> return
+    --             $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+    --             $ (\(OIDPayload x) -> x) payload
+
+  where
+    path = "/api/swap/v2/order/place"
+    request
+        = setRequestMethod "POST"
+        $ setRequestPath (pack path)
+        $ setRequestHeaders [("Content-Type","application/json;charset=utf-8"),("Connection","keep-alive")]
+        $ setRequestQueryString []
+        $ setRequestBodyJSON body
+        $ coinbeneFuturesReq
+
+    body =
+        PlaceBody
+        { pbSymbol     = marketSymbol (Proxy :: Proxy (Price p)) (Proxy :: Proxy (Vol market))
+        , pbDirection  = case side of {Bid -> "openLong"; Ask -> "openShort"}
+        , pbLeverage   = 10           -- FIX ME! currently 10x only
+        , pbOrderPrice = p
+        , pbQuantity   = v
+        , pbMarginMode = Just "fixed" -- FIX ME! should be changeable
+        , pbClientId   = Nothing      -- FIX ME! Currently, not used. Do I need/should use this?
+        }
+
+data PlaceLimitRequestBody p =
+    PlaceBody
+    { pbSymbol     :: String
+    , pbDirection  :: String
+    , pbLeverage   :: Double
+    , pbOrderPrice :: Price p
+    , pbQuantity   :: Vol   p
+    , pbMarginMode :: Maybe String
+    , pbClientId   :: Maybe String
+    } deriving (Eq, Show, Generic)
+
+instance Coin p => ToJSON (PlaceLimitRequestBody p) where
+    toJSON (PlaceBody sy d l (Price p) (Vol q) mMode mCoid) = object
+        [ "symbol"     .= sy
+        , "direction"  .= d
+        , "leverage"   .= (show $ truncate l) -- Must be integer (no decimal point)
+        , "orderPrice" .= showBare p
+        , "quantity"   .= (show $ truncate $ ((read $ showBare q) :: Double)) -- Must be integer
+        , "marginMode" .= mMode
+        , "clientId"   .= mCoid
+        ]
+
 

@@ -5,10 +5,12 @@
 #define MACRO_CURRENCY     ETH
 #define MACRO_MARKET_NAME  "ETHBRL"
 #define MACRO_TEST_VOL     0.01
+#define MACRO_FUTURE_PRICE 1400
 #else
 #define MACRO_CURRENCY     BTC
 #define MACRO_MARKET_NAME  "BTCBRL"
 #define MACRO_TEST_VOL     0.001
+#define MACRO_FUTURE_PRICE 14000
 #endif
 
 import Test.Tasty
@@ -52,7 +54,7 @@ main = defaultMainWithIngredients ings $
 
     mkConfig apiid apikey = do
         manager <- newManager tlsManagerSettings
-        return $ Coinbene manager apiid apikey Silent
+        return $ Coinbene manager apiid apikey Normal
 
 
 ---------------------------------------
@@ -114,6 +116,9 @@ tests config = testGroup ("\nAPI test cases for " <> MACRO_MARKET_NAME <> ". For
         trades <- getTrades coinbene (Proxy :: Proxy (Price BRL)) (Proxy :: Proxy (Vol MACRO_CURRENCY))
         assertBool ("Less than 3 trades found: " ++ show trades) $ length trades > 2 && tPrice (head trades) > 0
 
+  ---------------------------------------
+  -- FUTURES
+  --
   , testCase "live - get futures account info" $ do
         coinbene <- config
         accInfo <- getAccInfo coinbene
@@ -122,6 +127,11 @@ tests config = testGroup ("\nAPI test cases for " <> MACRO_MARKET_NAME <> ". For
   , testCase "benchmark futures account parsing" $ do
         let eFuturesAccResponse = eitherDecode' encodedFuturesAccountInfoResponse :: Either String (FuturesResp FuturesAccInfo)
         eFuturesAccResponse @?= Right sampleFuturesAccountInfoResponse
+
+  , testCase "live - place futures short limit" $ do
+        coinbene <- config
+        oid <- placeOrder coinbene (Proxy :: Proxy MACRO_CURRENCY) (ReqID "hi!") Ask (Price MACRO_FUTURE_PRICE :: Price USDT) (Vol 14 :: Vol USDT)
+        assertBool (show oid) $ oid /= OrderID "2018" -- forces evaluation
 
   ]
 
@@ -175,14 +185,14 @@ sampleBook = QuoteBook
 
 
 ---------------
-encodedFuturesAccountInfoResponse = "{\"code\":200,\"message\":\"\",\"data\":{\"availableBalance\":\"0.0789\","
+encodedFuturesAccountInfoResponse = "{\"code\":200,\"message\":null,\"data\":{\"availableBalance\":\"0.0789\","
     <> "\"frozenBalance\":\"0.0000\",\"marginBalance\":\"0.0790\",\"marginRate\":\"0.0005\","
-    <> "\"totalBalance\":\"0.0789\",\"unrealisedPnl\":\"0.0000\"},\"timestamp\":1562800020291}"
+    <> "\"balance\":\"0.0789\",\"unrealisedPnl\":\"0.0000\"}}"
 
 sampleFuturesAccountInfoResponse =
     FuturesResp
     { rCode     = 200
-    , rMessage  = Just ""
+    , rMessage  = Nothing
     , rData     = Just $
         FuturesAccInfo
         { availBal   = Cost 0.0789

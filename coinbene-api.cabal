@@ -47,6 +47,8 @@ library
     , scientific
     , monad-time
     , time
+    , iso8601-time
+    , memory
     , cryptonite
     , unordered-containers
     , vector
