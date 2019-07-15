@@ -165,7 +165,7 @@ coinbeneFuturesReq
     $ setRequestCheckStatus -- force throwing `StatusCodeException` on non-2XX status codes
     $ defaultRequest
 
-decodeResponse :: ParsePayload payload => String -> Response LBS.ByteString -> Either ExchangeError payload
+decodeResponse :: FromUnwrappedToplevelJSON payload => String -> Response LBS.ByteString -> Either ExchangeError payload
 decodeResponse errFunctionName response = case eitherDecode' (responseBody response) of
     Left errMsg -> Left $ JSONDecodingError (errFunctionName ++ ": " ++ errMsg ++ " - response: " ++ show response)
     Right resp  -> case resp of
