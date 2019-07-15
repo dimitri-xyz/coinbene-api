@@ -232,3 +232,11 @@ data FuturesResp payload
 
 instance FromJSON payload => FromJSON (FuturesResp payload) where
     parseJSON = genericParseJSON defaultOptions{ fieldLabelModifier = map toLower . drop 1 }
+
+data FuturesPlaceOrderPayload =
+    FuturesPlaceOrderPayload
+    { orderId  :: OrderID
+    , clientId :: Maybe String
+    } deriving (Show, Eq, Generic)
+
+instance FromJSON FuturesPlaceOrderPayload

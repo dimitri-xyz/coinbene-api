@@ -495,14 +495,13 @@ placeCoinbeneFuturesLimit config market (ReqID reqId) side p v = retry False (ve
                     (if verbosity config == Deafening then traceShowId signedReq else signedReq)
                     (getManager config)
 
-    error (show response)
-    -- let result = decodeFuturesResponse "placeCoinbeneFuturesLimit"
-    --                 (if verbosity config == Deafening then traceShowId response else response)
-    -- case result of
-    --     Left exception -> throwM exception
-    --     Right payload  -> return
-    --             $ (\x -> if verbosity config == Verbose then traceShowId x else x)
-    --             $ (\(OIDPayload x) -> x) payload
+    let result = decodeFuturesResponse "placeCoinbeneFuturesLimit"
+                    (if verbosity config == Deafening then traceShowId response else response)
+    case result of
+        Left exception -> throwM exception
+        Right payload  -> return
+                $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+                $ orderId payload
 
   where
     path = "/api/swap/v2/order/place"
