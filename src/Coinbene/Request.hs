@@ -145,7 +145,7 @@ class FuturesExchange config m where
 instance FuturesExchange Coinbene IO where
     getAccInfo     = getCoinbeneFuturesAccInfo
     placeOrder     = placeCoinbeneFuturesLimit
-    cancelOrder    = undefined
+    cancelOrder    = cancelCoinbeneFuturesLimit
 
 -----------------------------------------
 strToQuery :: (String, String) -> (ByteString, Maybe ByteString)
@@ -547,3 +547,38 @@ instance Coin p => ToJSON (PlaceLimitRequestBody p) where
         ]
 
 
+----------------------------------------
+cancelCoinbeneFuturesLimit :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderID
+cancelCoinbeneFuturesLimit config oid = retry False (verbosity config) retryDelay $ do
+    signedReq <- signFuturesRequestV2
+                    (getAPI_ID config)
+                    (getAPI_KEY config)
+                    (verbosity config)
+                    (if verbosity config == Verbose then trace (path <> " " <> show body) request else request)
+    response <- http
+                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (getManager config)
+
+    let result = decodeFuturesResponse errFunctionName (if verbosity config == Deafening then traceShowId response else response)
+    case result of
+        Left exception -> throwM exception -- It seems cancellation does NOT fail on already executed orders
+        Right payload  -> return
+                $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+                $ cancelOrderId payload
+  where
+    errFunctionName = "cancelCoinbeneFuturesLimit"
+    path = "/api/swap/v2/order/cancel"
+    request
+        = setRequestMethod "POST"
+        $ setRequestPath (pack path)
+        $ setRequestHeaders [("Content-Type","application/json;charset=utf-8"),("Connection","keep-alive")]
+        $ setRequestQueryString []
+        $ setRequestBodyJSON body
+        $ coinbeneFuturesReq
+
+    body = CancelLimitRequestBody oid
+
+
+data CancelLimitRequestBody = CancelLimitRequestBody { orderIdToCancel :: OrderID } deriving (Eq, Show, Generic)
+instance ToJSON CancelLimitRequestBody where
+    toJSON (CancelLimitRequestBody oid) = object [ "orderId" .= oid ]

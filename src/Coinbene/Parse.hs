@@ -240,3 +240,11 @@ data FuturesPlaceOrderPayload =
     } deriving (Show, Eq, Generic)
 
 instance FromJSON FuturesPlaceOrderPayload
+
+data FuturesCancelOrderPayload =
+    FuturesCancelOrderPayload
+    { cancelOrderId  :: OrderID
+    } deriving (Show, Eq, Generic)
+
+instance FromJSON FuturesCancelOrderPayload where
+    parseJSON v = FuturesCancelOrderPayload <$> parseJSON v

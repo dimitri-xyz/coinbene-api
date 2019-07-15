@@ -51,7 +51,7 @@ newtype MilliEpoch = MilliEpoch Word64 deriving (Show, Eq, Ord, Generic, Num, Re
 showBareMilliEpoch :: MilliEpoch -> String
 showBareMilliEpoch (MilliEpoch w) = show w
 
-newtype OrderID  = OrderID String deriving (Show, Eq, Ord, Generic, FromJSON)
+newtype OrderID  = OrderID String deriving (Show, Eq, Ord, Generic, FromJSON, ToJSON)
 data OrderSide   = Bid | Ask deriving (Show, Eq)
 data OrderStatus = Filled | Unfilled | PartiallyFilled | Canceled | PartiallyCanceled deriving (Show, Eq)
 
