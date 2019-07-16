@@ -137,8 +137,8 @@ newtype ReqID = ReqID String deriving (Eq, Show)
 
 class FuturesExchange config m where
     placeOrder    :: (HTTP m, MonadTime m, Coin p, Coin market) => config -> Proxy market -> ReqID -> OrderSide -> Price p -> Vol p -> m OrderID
-    -- getOpenOrders :: (HTTP m, MonadTime m, Coin p, Coin v) => config -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
-    -- getOrderInfo  :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderInfo
+    getFuturesOpenOrders :: (HTTP m, MonadTime m, Coin p, Coin market) => config -> Proxy (Price p) -> Proxy market -> m [FuturesOrderInfo]
+    getFuturesOrderInfo  :: (HTTP m, MonadTime m) => config -> OrderID -> m FuturesOrderInfo
     cancelOrder   :: (HTTP m, MonadTime m) => config -> OrderID -> m OrderID
     getAccInfo    :: (HTTP m, MonadTime m) => config            -> m FuturesAccInfo
 
@@ -146,6 +146,8 @@ instance FuturesExchange Coinbene IO where
     placeOrder config market reqId side = placeCoinbeneFuturesLimit config market Fixed (Leverage 10) reqId (case side of {Bid -> OpenLong; Ask -> OpenShort})
     cancelOrder                         = cancelCoinbeneFuturesLimit
     getAccInfo                          = getCoinbeneFuturesAccInfo
+    getFuturesOpenOrders                = getOpenCoinbeneFutures
+    getFuturesOrderInfo                 = getCoinbeneFuturesOrderInfo
 
 -----------------------------------------
 strToQuery :: (String, String) -> (ByteString, Maybe ByteString)
@@ -589,3 +591,66 @@ cancelCoinbeneFuturesLimit config oid = retry False (verbosity config) retryDela
 data CancelLimitRequestBody = CancelLimitRequestBody { orderIdToCancel :: OrderID } deriving (Eq, Show, Generic)
 instance ToJSON CancelLimitRequestBody where
     toJSON (CancelLimitRequestBody oid) = object [ "orderId" .= oid ]
+
+----------------------------------------
+getOpenCoinbeneFutures :: forall m p market. (HTTP m, MonadTime m, Coin p, Coin market) => Coinbene -> Proxy (Price p) -> Proxy market -> m [FuturesOrderInfo]
+getOpenCoinbeneFutures config _ _ = retry True (verbosity config) retryDelay $ do
+    signedReq <- signFuturesRequestV2
+                    (getAPI_ID  config)
+                    (getAPI_KEY config)
+                    (verbosity config)
+                    (if verbosity config == Verbose then trace path request else request)
+    response <- http
+                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (getManager config)
+
+    let result = decodeFuturesResponse "getOpenCoinbeneFutures"
+                    (if verbosity config == Deafening then traceShowId response else response)
+    case result of
+        Left exception -> throwM exception
+        Right payload  -> return
+                $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+                $ payload
+
+  where
+    marketName = marketSymbol (Proxy :: Proxy (Price p)) (Proxy :: Proxy (Vol market))
+    path = "/api/swap/v2/order/openOrders"
+    query = [("symbol", marketName)]
+    request
+        = setRequestMethod "GET"
+        $ setRequestPath (pack path)
+        $ setRequestQueryString (fmap strToQuery query)
+        $ setRequestHeaders [("Content-Type","application/json;charset=utf-8"),("Connection","keep-alive")]
+        $ coinbeneFuturesReq
+
+-- FIX ME! DRY violations on all these
+----------------------------------------
+getCoinbeneFuturesOrderInfo :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m FuturesOrderInfo
+getCoinbeneFuturesOrderInfo config (OrderID oid) = retry True (verbosity config) retryDelay $ do
+    signedReq <- signFuturesRequestV2
+                    (getAPI_ID  config)
+                    (getAPI_KEY config)
+                    (verbosity config)
+                    (if verbosity config == Verbose then trace path request else request)
+    response <- http
+                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (getManager config)
+
+    let result = decodeFuturesResponse "getCoinbeneFuturesOrderInfo"
+                    (if verbosity config == Deafening then traceShowId response else response)
+    case result of
+        Left exception -> throwM exception
+        Right payload  -> return
+                $ (\x -> if verbosity config == Verbose then traceShowId x else x)
+                $ payload
+
+  where
+    path = "/api/swap/v2/order/info"
+    query = [("orderId", oid)]
+    request
+        = setRequestMethod "GET"
+        $ setRequestPath (pack path)
+        $ setRequestQueryString (fmap strToQuery query)
+        $ setRequestHeaders [("Content-Type","application/json;charset=utf-8"),("Connection","keep-alive")]
+        $ coinbeneFuturesReq
+

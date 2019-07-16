@@ -59,7 +59,7 @@ main = defaultMainWithIngredients ings $
 
 ---------------------------------------
 tests :: IO Coinbene -> TestTree
-tests config = testGroup ("\nAPI test cases for " <> MACRO_MARKET_NAME <> ". For other currencies, change compiler flag.")
+tests config = testGroup ("\nAPI SPOT test cases for " <> MACRO_MARKET_NAME <> " (Futures in USDT). For other currencies, change compiler flag.")
   [ testCase "benchmark orderbook parsing" $ do
         let mSampleResp = decode encodedSampleResponse
         mSampleResp @?= Just sampleResponse
@@ -138,6 +138,18 @@ tests config = testGroup ("\nAPI test cases for " <> MACRO_MARKET_NAME <> ". For
         oid  <- placeOrder  coinbene (Proxy :: Proxy MACRO_CURRENCY) (ReqID "FuturesClientOID") Ask (Price MACRO_FUTURE_PRICE :: Price USDT) (Vol 14 :: Vol USDT)
         oid' <- cancelOrder coinbene oid
         assertBool ("placed: " ++ show oid ++ " canceled: " ++ show oid') $ oid == oid'
+
+  , testCase "live - place futures order then get open futures orders" $ do
+        coinbene <- config
+        oid   <- placeOrder coinbene (Proxy :: Proxy MACRO_CURRENCY) (ReqID "FuturesClientOID") Ask (Price MACRO_FUTURE_PRICE :: Price USDT) (Vol 14 :: Vol USDT)
+        infos <- getFuturesOpenOrders coinbene (Proxy :: Proxy (Price USDT)) (Proxy :: Proxy MACRO_CURRENCY)
+        assertBool ("Placed futures order " ++ show oid ++ " but received empty open order list: " ++ show infos) $ oid /= (OrderID "") && infos /= []
+
+  , testCase "live - place futures order then get futures order info" $ do
+        coinbene <- config
+        oid  <- placeOrder coinbene (Proxy :: Proxy MACRO_CURRENCY) (ReqID "FuturesClientOID") Ask (Price MACRO_FUTURE_PRICE :: Price USDT) (Vol 14 :: Vol USDT)
+        info <- getCoinbeneFuturesOrderInfo coinbene oid
+        assertBool ("Placed futures order " ++ show oid ++ "\n got: " ++ show info) $ oid == foiOrderID info
 
   ]
 

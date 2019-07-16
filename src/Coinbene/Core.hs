@@ -11,6 +11,7 @@ import Data.Aeson
 import Data.Proxy
 
 import Data.Scientific              hiding (Fixed)
+import Data.Time                    (UTCTime)
 
 import Control.Exception
 
@@ -96,6 +97,40 @@ instance ToJSON MarginMode where
         case marginMode of
             Fixed   -> String "fixed"
             Crossed -> String "crossed"
+
+data OrderType = Market | Limit deriving (Show, Eq, Generic)
+
+instance FromJSON OrderType where
+    parseJSON v =
+        case v of
+            (String "limit")  -> pure Limit
+            (String "market") -> pure Market
+            _ -> fail ("Unknown futures order type: " <> show v)
+
+instance ToJSON OrderType where
+    toJSON orderType =
+        case orderType of
+            Limit  -> String "limit"
+            Market -> String "market"
+
+data FuturesStatus = StatusNew | StatusFilled | StatusCanceled | StatusPartiallyFilled deriving (Show, Eq, Generic)
+
+instance FromJSON FuturesStatus where
+    parseJSON v =
+        case v of
+            (String "new")             -> pure StatusNew
+            (String "filled")          -> pure StatusFilled
+            (String "canceled")        -> pure StatusCanceled
+            (String "partiallyFilled") -> pure StatusPartiallyFilled
+            _ -> fail ("Unknown futures order status: " <> show v)
+
+instance ToJSON FuturesStatus where
+    toJSON direction =
+        case direction of
+            StatusNew             -> String "new"
+            StatusFilled          -> String "filled"
+            StatusCanceled        -> String "canceled"
+            StatusPartiallyFilled -> String "partiallyFilled"
 
 ----------------------------------------
 data AskQuote p v
@@ -234,3 +269,40 @@ instance FromJSON FuturesAccInfo where
             <*> fmap (Cost . read) (v .: "balance"         )
             <*> fmap (Cost . read) (v .: "unrealisedPnl"   )
 -----------------------------------------
+
+-----------------------------------------
+data FuturesOrderInfo =
+    FuturesLimitOrder
+    { foiOrderID    :: OrderID
+    , foiDirection :: Direction
+    , foiLeverage :: Leverage
+    , foiMarket     :: String
+    , foiLimitPrice :: Price Scientific
+    , foiLimitVol   :: Vol   Scientific
+    , foiLimitValue :: Cost  Scientific
+    , foiFees         :: Cost Scientific
+    , foiFilledVol    :: Vol  Scientific
+    , foiAvePrice     :: Price Scientific
+    , foiCreated      :: UTCTime
+    , foiStatus       :: FuturesStatus
+    } deriving (Show, Eq)
+
+-- Can only Limit order for now
+instance FromJSON FuturesOrderInfo where
+    parseJSON = withObject "FuturesOrderInfo" $ \v -> do
+        orderType <- v .: "orderType"
+        case orderType of
+            Market -> fail "NOT IMPLEMENTED -  Can only parse Limit orders in a `FuturesOrderInfo`"
+            Limit  -> FuturesLimitOrder
+                <$> v .: "orderId"
+                <*> v .: "direction"
+                <*> fmap (Leverage . read) (v .: "leverage")
+                <*> v .: "symbol"
+                <*> fmap (Price . read) (v .: "orderPrice")
+                <*> fmap (Vol   . read) (v .: "quantity")
+                <*> fmap (Cost  . read) (v .: "orderValue")
+                <*> fmap (Cost  . read) (v .: "fee")
+                <*> fmap (Vol   . read) (v .: "filledQuantity")
+                <*> fmap (Price . read) (v .: "averagePrice")
+                <*> v .: "orderTime"
+                <*> v .: "status"
