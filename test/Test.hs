@@ -135,7 +135,7 @@ tests config = testGroup ("\nAPI test cases for " <> MACRO_MARKET_NAME <> ". For
 
   , testCase "live - place and cancel futures short" $ do
         coinbene <- config
-        oid  <- placeOrder  coinbene (Proxy :: Proxy MACRO_CURRENCY) (ReqID "FuturesClientOID") Ask (Price 10000 {- MACRO_FUTURE_PRICE-} :: Price USDT) (Vol 14 :: Vol USDT)
+        oid  <- placeOrder  coinbene (Proxy :: Proxy MACRO_CURRENCY) (ReqID "FuturesClientOID") Ask (Price MACRO_FUTURE_PRICE :: Price USDT) (Vol 14 :: Vol USDT)
         oid' <- cancelOrder coinbene oid
         assertBool ("placed: " ++ show oid ++ " canceled: " ++ show oid') $ oid == oid'
 

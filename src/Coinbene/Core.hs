@@ -10,14 +10,18 @@ import GHC.Generics
 import Data.Aeson
 import Data.Proxy
 
-import Data.Scientific
+import Data.Scientific              hiding (Fixed)
 
 import Control.Exception
 
 data ExchangeError
-    = ExchangeError     String
+    = ExchangeError Int String
     | JSONDecodingError String
     deriving Show
+
+genericError, didNotCompleteError :: Int
+genericError        = 1
+didNotCompleteError = 10310
 
 instance Exception ExchangeError
 
@@ -55,6 +59,45 @@ newtype OrderID  = OrderID String deriving (Show, Eq, Ord, Generic, FromJSON, To
 data OrderSide   = Bid | Ask deriving (Show, Eq)
 data OrderStatus = Filled | Unfilled | PartiallyFilled | Canceled | PartiallyCanceled deriving (Show, Eq)
 
+----------------------------------------
+-- Futures Market
+newtype Leverage = Leverage Int deriving (Show, Eq, Ord, Generic, FromJSON, ToJSON)
+
+data Direction   = OpenLong | CloseLong | OpenShort | CloseShort deriving (Show, Eq)
+
+instance FromJSON Direction where
+    parseJSON v =
+        case v of
+            (String "openLong")   -> pure OpenLong
+            (String "closeLong")  -> pure CloseLong
+            (String "openShort")  -> pure OpenShort
+            (String "closeShort") -> pure CloseShort
+            _ -> fail ("Unknown order direction: " <> show v)
+
+instance ToJSON Direction where
+    toJSON direction =
+        case direction of
+            OpenLong   -> String "openLong"
+            CloseLong  -> String "closeLong"
+            OpenShort  -> String "openShort"
+            CloseShort -> String "closeShort"
+
+data MarginMode  = Fixed | Crossed deriving (Show, Eq, Generic)
+
+instance FromJSON MarginMode where
+    parseJSON v =
+        case v of
+            (String "fixed")   -> pure Fixed
+            (String "crossed") -> pure Crossed
+            _ -> fail ("Unknown margin mode: " <> show v)
+
+instance ToJSON MarginMode where
+    toJSON marginMode =
+        case marginMode of
+            Fixed   -> String "fixed"
+            Crossed -> String "crossed"
+
+----------------------------------------
 data AskQuote p v
   = AskQ
     { aqPrice    :: Price p

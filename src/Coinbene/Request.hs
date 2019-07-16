@@ -143,9 +143,9 @@ class FuturesExchange config m where
     getAccInfo    :: (HTTP m, MonadTime m) => config            -> m FuturesAccInfo
 
 instance FuturesExchange Coinbene IO where
-    getAccInfo     = getCoinbeneFuturesAccInfo
-    placeOrder     = placeCoinbeneFuturesLimit
-    cancelOrder    = cancelCoinbeneFuturesLimit
+    placeOrder config market reqId side = placeCoinbeneFuturesLimit config market Fixed (Leverage 10) reqId (case side of {Bid -> OpenLong; Ask -> OpenShort})
+    cancelOrder                         = cancelCoinbeneFuturesLimit
+    getAccInfo                          = getCoinbeneFuturesAccInfo
 
 -----------------------------------------
 strToQuery :: (String, String) -> (ByteString, Maybe ByteString)
@@ -170,13 +170,13 @@ decodeResponse errFunctionName response = case eitherDecode' (responseBody respo
     Left errMsg -> Left $ JSONDecodingError (errFunctionName ++ ": " ++ errMsg ++ " - response: " ++ show response)
     Right resp  -> case resp of
                         RespOK payload time -> Right payload
-                        RespError desc time -> Left $ ExchangeError (errFunctionName ++ ": " ++ desc ++ " - response: " ++ show response)
+                        RespError desc time -> Left $ ExchangeError genericError (errFunctionName ++ ": " ++ desc ++ " - response: " ++ show response)
 
 decodeFuturesResponse :: FromJSON payload => String -> Response LBS.ByteString -> Either ExchangeError payload
 decodeFuturesResponse errFunctionName response = case eitherDecode' (responseBody response) of
     Left errMsg -> Left $ JSONDecodingError (errFunctionName ++ ": " ++ errMsg ++ " - response: " ++ show response)
     Right resp  -> case resp of
-                        FuturesResp code message Nothing        -> Left $ ExchangeError (errFunctionName ++ " - missing data - response: " ++ show response)
+                        FuturesResp code message Nothing        -> Left $ ExchangeError code (errFunctionName ++ " - missing data - response: " ++ show response)
                         FuturesResp code message (Just payload) -> Right payload
 
 signSpotRequest :: MonadTime m => API_ID -> API_KEY -> [(String, String)] -> Request -> m Request
@@ -359,7 +359,7 @@ cancelCoinbeneOrder config (OrderID oid) = retry True (verbosity config) retryDe
     -- is considered a successful request
     acceptAttemptedRequest :: Verbosity -> String -> OrderID -> ExchangeError -> m OrderID
     acceptAttemptedRequest verbosity fname oid err = case err of
-            ExchangeError msg ->
+            ExchangeError _ msg ->
                 if (fname <> ": " <> "The transaction has been traded, failure") `isPrefixOf` msg ||
                    (fname <> ": " <> "Invalid Order Status")                     `isPrefixOf` msg
                     then return $ (\x -> if verbosity >= Normal then trace ("Request to cancel already executed order: " <> show x) x else x) oid
@@ -484,8 +484,8 @@ getCoinbeneFuturesAccInfo config = retry True (verbosity config) retryDelay $ do
 ----------------------------------------
 placeCoinbeneFuturesLimit ::
     forall m p v market. (HTTP m, MonadTime m, Coin p, Coin market)
-    => Coinbene -> Proxy market -> ReqID -> OrderSide -> Price p -> Vol p -> m OrderID
-placeCoinbeneFuturesLimit config market (ReqID reqId) side p v = retry False (verbosity config) retryDelay $ do
+    => Coinbene -> Proxy market -> MarginMode -> Leverage -> ReqID -> Direction -> Price p -> Vol p -> m OrderID
+placeCoinbeneFuturesLimit config market marginMode leverage (ReqID reqId) direction p v = retry False (verbosity config) retryDelay $ do
     signedReq <- signFuturesRequestV2
                     (getAPI_ID config)
                     (getAPI_KEY config)
@@ -516,39 +516,39 @@ placeCoinbeneFuturesLimit config market (ReqID reqId) side p v = retry False (ve
     body =
         PlaceBody
         { pbSymbol     = marketSymbol (Proxy :: Proxy (Price p)) (Proxy :: Proxy (Vol market))
-        , pbDirection  = case side of {Bid -> "openLong"; Ask -> "openShort"}
-        , pbLeverage   = 10           -- FIX ME! currently 10x only
+        , pbDirection  = direction
+        , pbLeverage   = leverage
         , pbOrderPrice = p
         , pbQuantity   = v
-        , pbMarginMode = Just "fixed" -- FIX ME! should be changeable
-        , pbClientId   = Nothing      -- FIX ME! Currently, not used. Do I need/should use this?
+        , pbMarginMode = marginMode
+        , pbClientId   = if reqId == mempty then Nothing else Just reqId
         }
 
 data PlaceLimitRequestBody p =
     PlaceBody
     { pbSymbol     :: String
-    , pbDirection  :: String
-    , pbLeverage   :: Double
+    , pbDirection  :: Direction
+    , pbLeverage   :: Leverage
     , pbOrderPrice :: Price p
     , pbQuantity   :: Vol   p
-    , pbMarginMode :: Maybe String
+    , pbMarginMode :: MarginMode
     , pbClientId   :: Maybe String
     } deriving (Eq, Show, Generic)
 
 instance Coin p => ToJSON (PlaceLimitRequestBody p) where
-    toJSON (PlaceBody sy d l (Price p) (Vol q) mMode mCoid) = object
+    toJSON (PlaceBody sy d l (Price p) (Vol q) mode mCoid) = object
         [ "symbol"     .= sy
         , "direction"  .= d
-        , "leverage"   .= (show $ truncate l) -- Must be integer (no decimal point)
+        , "leverage"   .= l -- Must be integer (no decimal point)
         , "orderPrice" .= showBare p
         , "quantity"   .= (show $ truncate $ ((read $ showBare q) :: Double)) -- Must be integer
-        , "marginMode" .= mMode
+        , "marginMode" .= mode
         , "clientId"   .= mCoid
         ]
 
 
 ----------------------------------------
-cancelCoinbeneFuturesLimit :: (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderID
+cancelCoinbeneFuturesLimit :: forall m . (HTTP m, MonadTime m) => Coinbene -> OrderID -> m OrderID
 cancelCoinbeneFuturesLimit config oid = retry False (verbosity config) retryDelay $ do
     signedReq <- signFuturesRequestV2
                     (getAPI_ID config)
@@ -561,7 +561,7 @@ cancelCoinbeneFuturesLimit config oid = retry False (verbosity config) retryDela
 
     let result = decodeFuturesResponse errFunctionName (if verbosity config == Deafening then traceShowId response else response)
     case result of
-        Left exception -> throwM exception -- It seems cancellation does NOT fail on already executed orders
+        Left exception -> acceptAttemptedRequest (verbosity config) errFunctionName oid exception
         Right payload  -> return
                 $ (\x -> if verbosity config == Verbose then traceShowId x else x)
                 $ cancelOrderId payload
@@ -578,6 +578,13 @@ cancelCoinbeneFuturesLimit config oid = retry False (verbosity config) retryDela
 
     body = CancelLimitRequestBody oid
 
+    -- a failed cancellation attempt because the order was already fully executed or canceled
+    -- is considered a successful request
+    acceptAttemptedRequest :: Verbosity -> String -> OrderID -> ExchangeError -> m OrderID
+    acceptAttemptedRequest verbosity fname oid err = case err of
+            ExchangeError didNotCompleteError msg ->
+                    return $ (\x -> if verbosity >= Normal then trace ("Request to cancel already executed order: " <> show x) x else x) oid
+            _ -> throwM err
 
 data CancelLimitRequestBody = CancelLimitRequestBody { orderIdToCancel :: OrderID } deriving (Eq, Show, Generic)
 instance ToJSON CancelLimitRequestBody where
