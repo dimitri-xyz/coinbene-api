@@ -12,6 +12,8 @@ import Data.Proxy
 
 import Data.Scientific              hiding (Fixed)
 import Data.Time                    (UTCTime)
+import Data.Time.Clock.POSIX        (utcTimeToPOSIXSeconds)
+
 
 import Control.Exception
 
@@ -52,6 +54,10 @@ instance FromJSON a => FromJSON (Cost  a)
 
 -----------------------------------------
 newtype MilliEpoch = MilliEpoch Word64 deriving (Show, Eq, Ord, Generic, Num, Real, Enum, Integral, FromJSON)
+
+utcTimeToMilliEpoch :: UTCTime -> MilliEpoch
+utcTimeToMilliEpoch = MilliEpoch . truncate . (1000*) . realToFrac . utcTimeToPOSIXSeconds
+-- NO sub-second precision (because of `utcTimeToPOSIXSeconds`)
 
 showBareMilliEpoch :: MilliEpoch -> String
 showBareMilliEpoch (MilliEpoch w) = show w

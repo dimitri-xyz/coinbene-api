@@ -3,6 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Coinbene.Request where
 
@@ -27,7 +28,6 @@ import           Data.Proxy                         (Proxy(..))
 import           Control.Monad.Catch
 import           Control.Concurrent                 (threadDelay)
 import           Control.Monad.Time                 (MonadTime, currentTime)
-import           Data.Time.Clock.POSIX              (utcTimeToPOSIXSeconds)
 import           Data.Time.Clock                    (UTCTime(..))
 import           Data.Time.ISO8601                  (formatISO8601Millis)
 
@@ -38,6 +38,9 @@ import           Coinbene.Core
 import           Coinbene.Parse
 
 import           Debug.Trace
+
+
+import Coins (BTC)
 
 {---------------------------------------
 
@@ -183,7 +186,7 @@ decodeFuturesResponse errFunctionName response = case eitherDecode' (responseBod
 
 signSpotRequest :: MonadTime m => API_ID -> API_KEY -> [(String, String)] -> Request -> m Request
 signSpotRequest id key params request = do
-    now <- fmap (MilliEpoch . truncate . (1000*) . realToFrac . utcTimeToPOSIXSeconds) currentTime
+    now <- utcTimeToMilliEpoch <$> currentTime
     let signedParams = signParams id key now params
     return $ setRequestBodyJSON (fromList signedParams) request
   where
@@ -199,7 +202,7 @@ signSpotRequest id key params request = do
 -- best to code the two options.
 signFuturesRequest :: MonadTime m => API_ID -> API_KEY -> [(String, String)] -> Request -> m Request
 signFuturesRequest id key params request = do
-    now <- fmap (MilliEpoch . truncate . (1000*) . realToFrac . utcTimeToPOSIXSeconds) currentTime
+    now <- utcTimeToMilliEpoch <$> currentTime
     let signedParams = signParams id key now (unpack $ path request) params
     return $ setRequestBodyJSON (fromList signedParams) request
   where
@@ -654,3 +657,56 @@ getCoinbeneFuturesOrderInfo config (OrderID oid) = retry True (verbosity config)
         $ setRequestHeaders [("Content-Type","application/json;charset=utf-8"),("Connection","keep-alive")]
         $ coinbeneFuturesReq
 
+
+----------------------------------------
+newtype CoinbeneFutures = CoinbeneFutures Coinbene
+
+instance Exchange CoinbeneFutures IO where
+    placeLimit                                 = translatePlaceLimit
+    getOpenOrders                              = translateGetOpenOrders
+    getOrderInfo  (CoinbeneFutures config) oid = fromFuturesOrderInfo <$> getFuturesOrderInfo config oid
+    cancel        (CoinbeneFutures config)     = cancelOrder config
+    getBook       (CoinbeneFutures config) _ _ = return $ QuoteBook{ qbAsks = [], qbBids = [] }
+    getBalances                                = undefined
+    getTrades                                  = undefined
+
+
+-- FIX ME! (readBare . showBareVol) is a very expensive no-op to just do
+-- type conversion. It is only done on 1 value per call, but still!
+translatePlaceLimit
+    :: forall m p v.
+    (FuturesExchange Coinbene m, HTTP m, MonadTime m, Coin p, Coin v)
+    => CoinbeneFutures -> OrderSide -> Price p -> Vol v -> m OrderID
+translatePlaceLimit (CoinbeneFutures config) side price vol =
+    placeOrder config (Proxy :: Proxy BTC) (ReqID "") side price (Vol . readBare . showBareVol $ vol)
+
+translateGetOpenOrders
+    :: forall m p v.
+    (FuturesExchange Coinbene m, HTTP m, MonadTime m, Coin p, Coin v)
+    => CoinbeneFutures -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
+translateGetOpenOrders (CoinbeneFutures config) pp _ =
+    fmap fromFuturesOrderInfo <$> getFuturesOpenOrders config pp (Proxy :: Proxy v)
+
+fromFuturesOrderInfo  :: FuturesOrderInfo -> OrderInfo
+fromFuturesOrderInfo info = LimitOrder
+    { market     = foiMarket info
+    , oSide      = case foiDirection info of
+                        OpenLong  -> Bid
+                        OpenShort -> Ask
+                        _         -> error $ "NOT IMPLEMENTED - fromFuturesOrderInfo: " <> show (foiDirection info)
+    , limitPrice = foiLimitPrice info
+    , limitVol   = foiLimitVol info
+    , orderID    = foiOrderID  info
+    , created    = utcTimeToMilliEpoch (foiCreated info)
+    , mModified  = Nothing
+    , status     = case foiStatus info of
+                    StatusNew             -> Unfilled
+                    StatusFilled          -> Filled
+                    StatusCanceled        -> Canceled
+                    StatusPartiallyFilled -> PartiallyFilled
+                    -- TO DO: We no longer generate `PartiallyCanceled` statuses. We ASSUME those are now included in `StatusCanceled`
+                    -- But this MAY NOT be the correct meaning. Is this correct!?
+    , filledVol  = foiFilledVol info
+    , filledAmount     = undefined -- TO DO: You better not touch this! It's NOT clear if this is exactly = foiFilledVol info * foiAvePrice info
+    , mAvePriceAndFees = Just (foiAvePrice info, foiFees info)
+    }
