@@ -685,7 +685,11 @@ translateGetOpenOrders
     (FuturesExchange Coinbene m, HTTP m, MonadTime m, Coin p, Coin v)
     => CoinbeneFutures -> Proxy (Price p) -> Proxy (Vol v) -> m [OrderInfo]
 translateGetOpenOrders (CoinbeneFutures config) pp _ =
-    fmap fromFuturesOrderInfo <$> getFuturesOpenOrders config pp (Proxy :: Proxy v)
+    -- FIX ME! this is confusing. Contracts are in "USDT", when we see the futures
+    -- market as a spot exchange for buying and selling "something". That something is
+    -- contracts which are specified in USDT. So USDT becomes the volume too.
+    -- But we need to pass along the market which is "BTC".
+    fmap fromFuturesOrderInfo <$> getFuturesOpenOrders config pp (Proxy :: Proxy BTC)
 
 fromFuturesOrderInfo  :: FuturesOrderInfo -> OrderInfo
 fromFuturesOrderInfo info = LimitOrder
