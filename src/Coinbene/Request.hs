@@ -170,6 +170,10 @@ coinbeneFuturesReq
     $ setRequestCheckStatus -- force throwing `StatusCodeException` on non-2XX status codes
     $ defaultRequest
 
+-- FIX ME! Only works for `RequestBodyLBS`
+showRequestBody :: Request -> Request
+showRequestBody req = trace (("Request body: " <>) $ (\(RequestBodyLBS lbs) -> LBS.unpack lbs) $ requestBody req) req
+
 decodeResponse :: FromUnwrappedToplevelJSON payload => String -> Response LBS.ByteString -> Either ExchangeError payload
 decodeResponse errFunctionName response = case eitherDecode' (responseBody response) of
     Left errMsg -> Left $ JSONDecodingError (errFunctionName ++ ": " ++ errMsg ++ " - response: " ++ show response)
@@ -278,7 +282,7 @@ placeCoinbeneLimit config side p v = retry False (verbosity config) retryDelay $
                     (if verbosity config == Verbose then trace ("/v1/trade/order/place " <> show params) params else params)
                     request
     response <- http
-                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (if verbosity config == Deafening then showRequestBody (traceShowId signedReq) else signedReq)
                     (getManager config)
 
     let result = decodeResponse "placeCoinbeneLimit" (if verbosity config == Deafening then traceShowId response else response)
@@ -311,7 +315,7 @@ getCoinbeneOrderInfo config (OrderID oid) = retry True (verbosity config) retryD
                     (if verbosity config == Verbose then trace ("/v1/trade/order/info " <> show params) params else params)
                     request
     response <- http
-                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (if verbosity config == Deafening then showRequestBody (traceShowId signedReq) else signedReq)
                     (getManager config)
 
     let result = decodeResponse "getCoinbeneOrderInfo" (if verbosity config == Deafening then traceShowId response else response)
@@ -339,7 +343,7 @@ cancelCoinbeneOrder config (OrderID oid) = retry True (verbosity config) retryDe
                     (if verbosity config == Verbose then trace ("/v1/trade/order/cancel " <> show params) params else params)
                     request
     response <- http
-                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (if verbosity config == Deafening then showRequestBody (traceShowId signedReq) else signedReq)
                     (getManager config)
 
     let result = decodeResponse errFunctionName (if verbosity config == Deafening then traceShowId response else response)
@@ -380,7 +384,7 @@ getOpenCoinbeneOrders config pp vv = retry True (verbosity config) retryDelay $ 
                     (if verbosity config == Verbose then trace ("/v1/trade/order/open-orders " <> show params) params else params)
                     request
     response <- http
-                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (if verbosity config == Deafening then showRequestBody (traceShowId signedReq) else signedReq)
                     (getManager config)
 
     let result = decodeResponse "getOpenCoinbeneOrders" (if verbosity config == Deafening then traceShowId response else response)
@@ -409,7 +413,7 @@ getCoinbeneBalances config = retry True (verbosity config) retryDelay $ do
                     (if verbosity config == Verbose then trace ("/v1/trade/balance " <> show params) params else params)
                     request
     response <- http
-                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (if verbosity config == Deafening then showRequestBody (traceShowId signedReq) else signedReq)
                     (getManager config)
 
     let result = decodeResponse "getCoinbeneBalances" (if verbosity config == Deafening then traceShowId response else response)
@@ -497,7 +501,7 @@ placeCoinbeneFuturesLimit config market marginMode leverage (ReqID reqId) direct
                     (verbosity config)
                     (if verbosity config == Verbose then trace (path <> " " <> show body) request else request)
     response <- http
-                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (if verbosity config == Deafening then showRequestBody (traceShowId signedReq) else signedReq)
                     (getManager config)
 
     let result = decodeFuturesResponse "placeCoinbeneFuturesLimit"
@@ -561,7 +565,7 @@ cancelCoinbeneFuturesLimit config oid = retry False (verbosity config) retryDela
                     (verbosity config)
                     (if verbosity config == Verbose then trace (path <> " " <> show body) request else request)
     response <- http
-                    (if verbosity config == Deafening then traceShowId signedReq else signedReq)
+                    (if verbosity config == Deafening then showRequestBody (traceShowId signedReq) else signedReq)
                     (getManager config)
 
     let result = decodeFuturesResponse errFunctionName (if verbosity config == Deafening then traceShowId response else response)
