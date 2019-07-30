@@ -708,12 +708,11 @@ fromFuturesOrderInfo info = LimitOrder
     , created    = utcTimeToMilliEpoch (foiCreated info)
     , mModified  = Nothing
     , status     = case foiStatus info of
-                    StatusNew             -> Unfilled
-                    StatusFilled          -> Filled
-                    StatusCanceled        -> Canceled
-                    StatusPartiallyFilled -> PartiallyFilled
-                    -- TO DO: We no longer generate `PartiallyCanceled` statuses. We ASSUME those are now included in `StatusCanceled`
-                    -- But this MAY NOT be the correct meaning. Is this correct!?
+                    StatusNew               -> Unfilled
+                    StatusFilled            -> Filled
+                    StatusCanceled          -> Canceled
+                    StatusPartiallyFilled   -> PartiallyFilled
+                    StatusPartiallyCanceled -> PartiallyCanceled
     , filledVol  = foiFilledVol info
     , filledAmount     = undefined -- TO DO: You better not touch this! It's NOT clear if this is exactly = foiFilledVol info * foiAvePrice info
     , mAvePriceAndFees = Just (foiAvePrice info, foiFees info)

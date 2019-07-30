@@ -119,24 +119,32 @@ instance ToJSON OrderType where
             Limit  -> String "limit"
             Market -> String "market"
 
-data FuturesStatus = StatusNew | StatusFilled | StatusCanceled | StatusPartiallyFilled deriving (Show, Eq, Generic)
+data FuturesStatus
+    = StatusNew
+    | StatusFilled
+    | StatusCanceled
+    | StatusPartiallyFilled
+    | StatusPartiallyCanceled
+    deriving (Show, Eq, Generic)
 
 instance FromJSON FuturesStatus where
     parseJSON v =
         case v of
-            (String "new")             -> pure StatusNew
-            (String "filled")          -> pure StatusFilled
-            (String "canceled")        -> pure StatusCanceled
-            (String "partiallyFilled") -> pure StatusPartiallyFilled
+            (String "new")               -> pure StatusNew
+            (String "filled")            -> pure StatusFilled
+            (String "canceled")          -> pure StatusCanceled
+            (String "partiallyFilled")   -> pure StatusPartiallyFilled
+            (String "partiallyCanceled") -> pure StatusPartiallyCanceled
             _ -> fail ("Unknown futures order status: " <> show v)
 
 instance ToJSON FuturesStatus where
     toJSON direction =
         case direction of
-            StatusNew             -> String "new"
-            StatusFilled          -> String "filled"
-            StatusCanceled        -> String "canceled"
-            StatusPartiallyFilled -> String "partiallyFilled"
+            StatusNew               -> String "new"
+            StatusFilled            -> String "filled"
+            StatusCanceled          -> String "canceled"
+            StatusPartiallyFilled   -> String "partiallyFilled"
+            StatusPartiallyCanceled -> String "partiallyCanceled"
 
 ----------------------------------------
 data AskQuote p v
